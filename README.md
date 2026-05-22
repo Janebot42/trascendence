@@ -36,38 +36,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 4. Ejecutar:
 
-
-
-
 ```bash
-node .\node_modules\typescript\bin\tsc -p tsconfig.json
 npm run build
 npm start
-```
-
- crear usuario de prueba
- 
-```powershell
- $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-
-Invoke-WebRequest `
-  -Uri "http://127.0.0.1:3000/auth/register" `
-  -Method POST `
-  -ContentType "application/json" `
-  -UseBasicParsing `
-  -WebSession $session `
-  -Body '{"username":"alice","email":"alice@example.com","password":"correct horse battery staple"}'
-
-  ```
-
- comprobar user
-
-```powershell
- Invoke-WebRequest `
-  -Uri "http://127.0.0.1:3000/me" `
-  -Method GET `
-  -UseBasicParsing `
-  -WebSession $session
 ```
 
 ## PostgreSQL local
@@ -93,6 +64,9 @@ La app mantiene repositorios en memoria para tests y desarrollo sin base de dato
 
 ## Endpoints iniciales
 
+- `GET /`
+- `GET /ui/app.css`
+- `GET /ui/app.js`
 - `GET /health`
 - `POST /auth/register`
 - `POST /auth/login`
@@ -106,6 +80,16 @@ La app mantiene repositorios en memoria para tests y desarrollo sin base de dato
 - `DELETE /2fa`
 - `GET /me`
 - `GET /admin/users`
+
+## UI manual de pruebas
+
+Con el backend arrancado, abre:
+
+```text
+http://127.0.0.1:3000/
+```
+
+La pantalla permite probar registro, login, logout, `/me`, reautenticacion, cambio de password, setup TOTP, confirmacion 2FA, login con segundo factor y recovery codes.
 
 ## Notas de seguridad
 

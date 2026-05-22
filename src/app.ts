@@ -25,9 +25,24 @@ import { TwoFactorService } from './modules/two_factor/twoFactor.service.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerTwoFactorRoutes } from './modules/two_factor/twoFactor.routes.js';
 import { registerUserRoutes } from './modules/users/users.routes.js';
+import { registerUiRoutes } from './ui/ui.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: env.NODE_ENV !== 'test' });
+
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    const rawBody = body.toString();
+    if (!rawBody.trim()) {
+      done(null, {});
+      return;
+    }
+
+    try {
+      done(null, JSON.parse(rawBody));
+    } catch (error) {
+      done(error as Error);
+    }
+  });
 
   await app.register(cookie);
 
@@ -73,6 +88,7 @@ export async function buildApp() {
   });
 
   app.get('/health', async () => ({ ok: true }));
+  await registerUiRoutes(app);
   await registerAuthRoutes(app, authService, sessionsService);
   await registerTwoFactorRoutes(app, twoFactorService, sessionsService);
   await registerUserRoutes(app, sessionsService, usersService);

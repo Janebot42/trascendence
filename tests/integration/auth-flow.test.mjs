@@ -216,6 +216,27 @@ test('rejects invalid credentials and protected routes without a session', async
   }
 });
 
+test('logout accepts requests without a JSON body', async () => {
+  const app = await buildApp();
+
+  try {
+    const cookie = await registerUser(app, 'logoutbody');
+
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: {
+        cookie,
+        'content-type': 'application/json'
+      }
+    });
+    assert.equal(logout.statusCode, 200);
+    assert.equal(logout.json().ok, true);
+  } finally {
+    await app.close();
+  }
+});
+
 test('normal users cannot access admin routes', async () => {
   const app = await buildApp();
 

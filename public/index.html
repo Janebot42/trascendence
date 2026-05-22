@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auth Test UI</title>
+    <link rel="stylesheet" href="/ui/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <h1>Auth Test UI</h1>
+          <p>Manual tester for sessions, password login and TOTP 2FA.</p>
+        </div>
+        <div class="status" id="status">Checking session...</div>
+      </section>
+
+      <section class="grid">
+        <form class="panel" id="registerForm">
+          <h2>Register</h2>
+          <label>
+            Username
+            <input name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Email
+            <input name="email" autocomplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="new-password" value="correct horse battery staple" required />
+          </label>
+          <button type="submit">Create account</button>
+        </form>
+
+        <form class="panel" id="loginForm">
+          <h2>Login</h2>
+          <label>
+            Username
+            <input name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" value="correct horse battery staple" required />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+
+        <form class="panel hidden" id="secondFactorForm">
+          <h2>Second factor</h2>
+          <label>
+            Challenge token
+            <input name="challengeToken" id="challengeToken" readonly />
+          </label>
+          <label>
+            Method
+            <select name="method">
+              <option value="totp">TOTP</option>
+              <option value="recovery_code">Recovery code</option>
+            </select>
+          </label>
+          <label>
+            Code
+            <input name="code" autocomplete="one-time-code" required />
+          </label>
+          <button type="submit">Complete login</button>
+        </form>
+
+        <section class="panel">
+          <h2>Session</h2>
+          <div class="actions">
+            <button type="button" id="refreshMe">Refresh /me</button>
+            <button type="button" id="logout">Logout</button>
+          </div>
+          <pre id="meBox">{}</pre>
+        </section>
+
+        <form class="panel" id="reauthForm">
+          <h2>Reauthenticate</h2>
+          <label>
+            Password
+            <input name="password" type="password" value="correct horse battery staple" required />
+          </label>
+          <label>
+            2FA method
+            <select name="secondFactorMethod">
+              <option value="">None</option>
+              <option value="totp">TOTP</option>
+              <option value="recovery_code">Recovery code</option>
+            </select>
+          </label>
+          <label>
+            2FA code
+            <input name="secondFactorCode" autocomplete="one-time-code" />
+          </label>
+          <button type="submit">Reauthenticate</button>
+        </form>
+
+        <section class="panel">
+          <h2>Two-factor setup</h2>
+          <div class="actions">
+            <button type="button" id="start2fa">Start setup</button>
+            <button type="button" id="disable2fa">Disable 2FA</button>
+          </div>
+          <label>
+            Provisioning URI
+            <textarea id="provisioningUri" readonly></textarea>
+          </label>
+          <label>
+            Manual secret
+            <input id="manualSecret" readonly />
+          </label>
+          <form id="confirm2faForm">
+            <label>
+              TOTP code
+              <input name="code" autocomplete="one-time-code" />
+            </label>
+            <button type="submit">Confirm 2FA</button>
+          </form>
+          <div>
+            <h3>Recovery codes</h3>
+            <pre id="recoveryCodes">Shown once after confirmation.</pre>
+          </div>
+        </section>
+
+        <form class="panel" id="passwordForm">
+          <h2>Change password</h2>
+          <label>
+            New password
+            <input name="newPassword" type="password" value="new correct horse battery staple" required />
+          </label>
+          <button type="submit">Change password</button>
+        </form>
+      </section>
+
+      <section class="panel log-panel">
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </section>
+    </main>
+
+    <script src="/ui/app.js"></script>
+  </body>
+</html>
