@@ -36,10 +36,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 4. Ejecutar:
 
-node .\node_modules\typescript\bin\tsc -p tsconfig.json
+
 
 
 ```bash
+node .\node_modules\typescript\bin\tsc -p tsconfig.json
 npm run build
 npm start
 ```
