@@ -2,7 +2,7 @@ import { env } from '../../config/env.js';
 import { securityConfig } from '../../config/security.js';
 import { hashToken } from '../../shared/crypto/hashToken.js';
 import { randomToken } from '../../shared/crypto/randomToken.js';
-import { badRequest, unauthorized } from '../../shared/errors/httpErrors.js';
+import { badRequest, conflict, unauthorized } from '../../shared/errors/httpErrors.js';
 import type { AuthService } from '../auth/auth.service.js';
 import type { UsersService } from '../users/users.service.js';
 import type { OAuthRepository } from './oauth.repository.js';
@@ -31,23 +31,26 @@ export class OAuthService {
     authorizeUrl.searchParams.set('redirect_uri', env.OAUTH_42_REDIRECT_URI!);
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('state', state);
-    return authorizeUrl.toString();
+    return { authorizationUrl: authorizeUrl.toString(), state };
   }
 
   async completeFortyTwoCallback(input: {
     code?: string;
     state?: string;
+    browserState?: string | null;
     ipAddress?: string | null;
     userAgent?: string | null;
   }): Promise<OAuthCallbackResult> {
     this.assertConfigured();
     if (!input.code || !input.state) throw badRequest('Missing OAuth callback parameters');
+    if (!input.browserState || input.browserState !== input.state) {
+      throw unauthorized('OAuth login session mismatch');
+    }
 
-    const stateRecord = await this.oauthRepository.findStateByTokenHash(hashToken(input.state));
-    if (!stateRecord || stateRecord.consumedAt || stateRecord.expiresAt <= new Date()) {
+    const stateRecord = await this.oauthRepository.consumeStateByTokenHash(hashToken(input.state));
+    if (!stateRecord || stateRecord.expiresAt <= new Date()) {
       throw unauthorized('Invalid OAuth state');
     }
-    await this.oauthRepository.consumeState(stateRecord.id);
 
     const accessToken = await this.exchangeCodeForAccessToken(input.code);
     const profile = await this.fetchFortyTwoProfile(accessToken);
@@ -99,14 +102,19 @@ export class OAuthService {
     }
 
     const normalizedEmail = profile.email?.toLowerCase() ?? null;
-    let user = normalizedEmail ? await this.usersService.findByEmail(normalizedEmail) : null;
-    if (!user) {
-      user = await this.usersService.createUser({
-        username: profile.login,
-        email: normalizedEmail,
-        displayName: profile.displayname ?? null
-      });
+    if (normalizedEmail) {
+      const existingEmailUser = await this.usersService.findByEmail(normalizedEmail);
+      if (existingEmailUser) {
+        throw conflict('An existing local account already uses this email', 'OAUTH_ACCOUNT_LINK_REQUIRED');
+      }
     }
+
+    const username = await this.generateAvailableUsername(profile.login);
+    const user = await this.usersService.createUser({
+      username,
+      email: normalizedEmail,
+      displayName: profile.displayname ?? null
+    });
 
     await this.oauthRepository.createAccount({
       userId: user.id,
@@ -119,6 +127,18 @@ export class OAuthService {
     return user;
   }
 
+  private async generateAvailableUsername(baseLogin: string): Promise<string> {
+    const normalizedBase = baseLogin.trim().toLowerCase();
+    if (!(await this.usersService.findByUsername(normalizedBase))) return normalizedBase;
+
+    for (let suffix = 1; suffix <= 1000; suffix += 1) {
+      const candidate = `${normalizedBase}-${suffix}`;
+      if (!(await this.usersService.findByUsername(candidate))) return candidate;
+    }
+
+    throw conflict('Could not allocate a username for this OAuth account', 'OAUTH_USERNAME_CONFLICT');
+  }
+
   private assertConfigured(): void {
     if (
       !env.OAUTH_42_CLIENT_ID ||
@@ -128,7 +148,7 @@ export class OAuthService {
       !env.OAUTH_42_TOKEN_URL ||
       !env.OAUTH_42_ME_URL
     ) {
-      throw badRequest('OAuth 42 is not configured');
+      throw new Error('OAuth 42 is not configured');
     }
   }
 }

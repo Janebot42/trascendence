@@ -15,3 +15,16 @@ export function clearSessionCookie(reply: FastifyReply): void {
   reply.clearCookie(securityConfig.cookieName, { path: '/' });
 }
 
+export function setOAuthStateCookie(reply: FastifyReply, state: string): void {
+  reply.setCookie(securityConfig.oauthCookieName, state, {
+    httpOnly: true,
+    secure: securityConfig.cookieSecure,
+    sameSite: securityConfig.cookieSameSite,
+    path: '/',
+    expires: new Date(Date.now() + securityConfig.oauthStateTtlMs)
+  });
+}
+
+export function clearOAuthStateCookie(reply: FastifyReply): void {
+  reply.clearCookie(securityConfig.oauthCookieName, { path: '/' });
+}

@@ -3,8 +3,7 @@ import type { OAuthAccountRecord, OAuthProvider, OAuthStateRecord } from './oaut
 
 export interface OAuthRepository {
   createState(input: Omit<OAuthStateRecord, 'id' | 'createdAt' | 'consumedAt'>): Promise<OAuthStateRecord>;
-  findStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null>;
-  consumeState(id: string): Promise<void>;
+  consumeStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null>;
   findAccountByProviderUserId(provider: OAuthProvider, providerUserId: string): Promise<OAuthAccountRecord | null>;
   createAccount(input: Omit<OAuthAccountRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<OAuthAccountRecord>;
 }
@@ -24,13 +23,11 @@ export class InMemoryOAuthRepository implements OAuthRepository {
     return record;
   }
 
-  async findStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null> {
-    return [...this.states.values()].find((state) => state.stateTokenHash === tokenHash) ?? null;
-  }
-
-  async consumeState(id: string): Promise<void> {
-    const state = this.states.get(id);
-    if (state && !state.consumedAt) state.consumedAt = new Date();
+  async consumeStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null> {
+    const state = [...this.states.values()].find((candidate) => candidate.stateTokenHash === tokenHash) ?? null;
+    if (!state || state.consumedAt) return null;
+    state.consumedAt = new Date();
+    return state;
   }
 
   async findAccountByProviderUserId(provider: OAuthProvider, providerUserId: string): Promise<OAuthAccountRecord | null> {

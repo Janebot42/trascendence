@@ -76,8 +76,9 @@ OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
 Flujo resumido:
 
 1. `GET /auth/oauth/42` redirige a 42 con `state`.
-2. `GET /auth/oauth/42/callback` valida `state`, intercambia `code`, obtiene perfil y resuelve usuario local.
+2. `GET /auth/oauth/42/callback` valida `state` y la cookie temporal del navegador, intercambia `code`, obtiene perfil y resuelve usuario local.
 3. Si el usuario local tiene 2FA activo, responde `requires_2fa`.
+4. Si el email ya pertenece a una cuenta local no enlazada, falla con conflicto en vez de enlazar automaticamente.
 4. Si no, crea sesion local con cookie.
 
 ## Estado actual

@@ -17,13 +17,16 @@ export class PgOAuthRepository implements OAuthRepository {
     return mapOAuthState(result.rows[0]);
   }
 
-  async findStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null> {
-    const result = await this.pool.query('select * from oauth_states where state_token_hash = $1', [tokenHash]);
+  async consumeStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null> {
+    const result = await this.pool.query(
+      `update oauth_states
+       set consumed_at = now()
+       where state_token_hash = $1
+         and consumed_at is null
+       returning *`,
+      [tokenHash]
+    );
     return result.rowCount ? mapOAuthState(result.rows[0]) : null;
-  }
-
-  async consumeState(id: string): Promise<void> {
-    await this.pool.query('update oauth_states set consumed_at = now() where id = $1 and consumed_at is null', [id]);
   }
 
   async findAccountByProviderUserId(provider: OAuthProvider, providerUserId: string): Promise<OAuthAccountRecord | null> {

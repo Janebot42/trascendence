@@ -82,6 +82,16 @@ export async function buildApp() {
   );
   const oauthService = new OAuthService(oauthRepository, usersService, authService);
 
+  if (env.NODE_ENV === 'test') {
+    app.decorate('testContext', {
+      oauthRepository,
+      usersService,
+      authService,
+      twoFactorService,
+      sessionsService
+    });
+  }
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({ error: error.code, message: error.message });

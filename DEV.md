@@ -137,7 +137,7 @@ admin
 3. Callback validates `state` and consumes it.
 4. Backend exchanges `code` for an access token.
 5. Backend fetches the 42 profile.
-6. Backend resolves an existing linked account or creates/links a local user.
+6. Backend resolves an existing linked account or creates a new local user. It does not auto-link by email to an existing password account.
 7. If local 2FA is disabled, create the final session.
 8. If local 2FA is enabled, create a local `login_challenge` and require TOTP.
 
