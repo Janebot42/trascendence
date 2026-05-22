@@ -36,9 +36,37 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 4. Ejecutar:
 
+node .\node_modules\typescript\bin\tsc -p tsconfig.json
+
+
 ```bash
 npm run build
 npm start
+```
+
+ crear usuario de prueba
+ 
+```powershell
+ $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
+Invoke-WebRequest `
+  -Uri "http://127.0.0.1:3000/auth/register" `
+  -Method POST `
+  -ContentType "application/json" `
+  -UseBasicParsing `
+  -WebSession $session `
+  -Body '{"username":"alice","email":"alice@example.com","password":"correct horse battery staple"}'
+
+  ```
+
+ comprobar user
+
+```powershell
+ Invoke-WebRequest `
+  -Uri "http://127.0.0.1:3000/me" `
+  -Method GET `
+  -UseBasicParsing `
+  -WebSession $session
 ```
 
 ## PostgreSQL local
