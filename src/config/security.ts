@@ -6,6 +6,7 @@ export const securityConfig = {
   cookieSameSite: 'lax' as const,
   sessionTtlMs: env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
   loginChallengeTtlMs: 5 * 60 * 1000,
+  oauthStateTtlMs: 10 * 60 * 1000,
   sensitiveActionTtlMs: 10 * 60 * 1000,
   totpIssuer: env.TOTP_ISSUER,
   totpEncryptionKeyBase64: env.TOTP_ENCRYPTION_KEY_BASE64

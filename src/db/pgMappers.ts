@@ -3,6 +3,7 @@ import type { Session } from '../modules/sessions/sessions.types.js';
 import type { LoginChallenge } from '../modules/auth/auth.repository.js';
 import type { PasswordCredential } from '../modules/auth/auth.types.js';
 import type { RecoveryCodeRecord, TotpRecord } from '../modules/two_factor/twoFactor.types.js';
+import type { OAuthAccountRecord, OAuthStateRecord } from '../modules/oauth/oauth.types.js';
 
 type Row = Record<string, unknown>;
 
@@ -78,3 +79,28 @@ export function mapRecoveryCode(row: Row): RecoveryCodeRecord {
   };
 }
 
+
+export function mapOAuthState(row: Row): OAuthStateRecord {
+  return {
+    id: row.id as string,
+    provider: row.provider as '42',
+    stateTokenHash: row.state_token_hash as string,
+    redirectTo: (row.redirect_to as string | null) ?? null,
+    createdAt: row.created_at as Date,
+    expiresAt: row.expires_at as Date,
+    consumedAt: (row.consumed_at as Date | null) ?? null
+  };
+}
+
+export function mapOAuthAccount(row: Row): OAuthAccountRecord {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    provider: row.provider as '42',
+    providerUserId: row.provider_user_id as string,
+    providerLogin: (row.provider_login as string | null) ?? null,
+    providerEmail: (row.provider_email as string | null) ?? null,
+    createdAt: row.created_at as Date,
+    updatedAt: row.updated_at as Date
+  };
+}

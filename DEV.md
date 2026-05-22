@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This backend is a modular monolith for a Transcendence-style project. It focuses on users, password authentication, server-side sessions, optional TOTP 2FA, recovery codes and simple role-based authorization.
+This backend is a modular monolith for a Transcendence-style project. It focuses on users, password authentication, OAuth 42 login, server-side sessions, optional TOTP 2FA, recovery codes and simple role-based authorization.
 
-The project intentionally avoids JWT as the main auth mechanism, OAuth, social login, microservices, CQRS, event sourcing and advanced ACLs. Those are not needed for the current problem.
+The project intentionally avoids JWT as the main auth mechanism, microservices, CQRS, event sourcing and advanced ACLs. It keeps the auth surface narrow: local password login, OAuth 42, local sessions and local TOTP.
 
 ## Stack
 
@@ -29,6 +29,7 @@ src/modules/
   auth/
   sessions/
   two_factor/
+  oauth/
   authorization/
 ```
 
@@ -82,6 +83,19 @@ Owns TOTP and recovery codes:
 - consume recovery code once
 - disable 2FA
 
+### `oauth`
+
+Owns OAuth 42 integration:
+
+- start authorization redirect
+- generate and validate `state`
+- exchange authorization code for access token
+- fetch 42 profile
+- resolve or create the local user
+- hand off to local session / 2FA flow
+
+OAuth is treated as another first-factor entry point. It does not replace local session management.
+
 ### `authorization`
 
 Owns request guards:
@@ -115,6 +129,19 @@ admin
 3. Verify password hash.
 4. If 2FA is disabled, create final session.
 5. Send session cookie.
+
+### Login with OAuth 42
+
+1. User hits `/auth/oauth/42`.
+2. Backend creates an OAuth `state` record and redirects to 42.
+3. Callback validates `state` and consumes it.
+4. Backend exchanges `code` for an access token.
+5. Backend fetches the 42 profile.
+6. Backend resolves an existing linked account or creates/links a local user.
+7. If local 2FA is disabled, create the final session.
+8. If local 2FA is enabled, create a local `login_challenge` and require TOTP.
+
+This keeps OAuth as identity proof and local sessions as the actual app authentication state.
 
 ### Login with 2FA
 
@@ -172,6 +199,8 @@ sessions
 login_challenges
 two_factor_totp
 recovery_codes
+oauth_states
+oauth_accounts
 ```
 
 The migration is idempotent and runs on startup when PostgreSQL is enabled.
@@ -184,6 +213,17 @@ Required:
 
 ```env
 TOTP_ENCRYPTION_KEY_BASE64=...
+```
+
+For OAuth 42:
+
+```env
+OAUTH_42_CLIENT_ID=...
+OAUTH_42_CLIENT_SECRET=...
+OAUTH_42_REDIRECT_URI=http://127.0.0.1:3000/auth/oauth/42/callback
+OAUTH_42_AUTHORIZE_URL=https://api.intra.42.fr/oauth/authorize
+OAUTH_42_TOKEN_URL=https://api.intra.42.fr/oauth/token
+OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
 ```
 
 Generate it with:

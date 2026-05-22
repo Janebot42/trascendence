@@ -26,6 +26,10 @@ import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerTwoFactorRoutes } from './modules/two_factor/twoFactor.routes.js';
 import { registerUserRoutes } from './modules/users/users.routes.js';
 import { registerUiRoutes } from './ui/ui.routes.js';
+import { InMemoryOAuthRepository } from './modules/oauth/oauth.repository.js';
+import { PgOAuthRepository } from './modules/oauth/oauth.pgRepository.js';
+import { OAuthService } from './modules/oauth/oauth.service.js';
+import { registerOAuthRoutes } from './modules/oauth/oauth.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: env.NODE_ENV !== 'test' });
@@ -59,6 +63,7 @@ export async function buildApp() {
   const sessionsRepository = pgPool ? new PgSessionsRepository(pgPool) : new InMemorySessionsRepository();
   const authRepository = pgPool ? new PgAuthRepository(pgPool) : new InMemoryAuthRepository();
   const twoFactorRepository = pgPool ? new PgTwoFactorRepository(pgPool) : new InMemoryTwoFactorRepository();
+  const oauthRepository = pgPool ? new PgOAuthRepository(pgPool) : new InMemoryOAuthRepository();
   const sessionsService = new SessionsService(sessionsRepository, usersService);
   const totpService = new TotpService(new SecretBox(securityConfig.totpEncryptionKeyBase64));
   const recoveryCodesService = new RecoveryCodesService(twoFactorRepository);
@@ -75,6 +80,7 @@ export async function buildApp() {
     sessionsService,
     twoFactorService
   );
+  const oauthService = new OAuthService(oauthRepository, usersService, authService);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
@@ -90,6 +96,7 @@ export async function buildApp() {
   app.get('/health', async () => ({ ok: true }));
   await registerUiRoutes(app);
   await registerAuthRoutes(app, authService, sessionsService);
+  await registerOAuthRoutes(app, oauthService);
   await registerTwoFactorRoutes(app, twoFactorService, sessionsService);
   await registerUserRoutes(app, sessionsService, usersService);
 

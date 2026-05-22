@@ -71,6 +71,21 @@ export class AuthService {
       throw unauthorized('Invalid credentials');
     }
 
+    return this.completeTrustedLogin({
+      userId: user.id,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent
+    });
+  }
+
+  async completeTrustedLogin(input: {
+    userId: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }): Promise<LoginResult> {
+    const user = await this.usersService.findById(input.userId);
+    if (!user || user.status !== 'active') throw unauthorized();
+
     if (await this.twoFactorService.isEnabled(user.id)) {
       const challengeToken = randomToken(32);
       const challenge = await this.authRepository.createLoginChallenge({

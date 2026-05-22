@@ -1,6 +1,6 @@
 # Transcendence Backend Base
 
-Backend unico modular para usuarios, autenticacion, sesiones, 2FA TOTP y autorizacion por rol.
+Backend unico modular para usuarios, autenticacion, sesiones, login OAuth 42, 2FA TOTP y autorizacion por rol.
 
 ## Stack elegido
 
@@ -16,6 +16,7 @@ Backend unico modular para usuarios, autenticacion, sesiones, 2FA TOTP y autoriz
 - `auth`: registro, login, challenges 2FA, reautenticacion y cambio de password.
 - `sessions`: sesiones opacas de servidor y cookie segura.
 - `two_factor`: TOTP, provisioning URI y recovery codes.
+- `oauth`: inicio de login OAuth 42, validacion de state y callback.
 - `authorization`: `requireAuth` y `requireRole`.
 
 ## Arranque local
@@ -58,9 +59,30 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/transcendence
 
 Al arrancar, el backend ejecuta la migracion base idempotente de `db/migrations/001_auth_base.sql`.
 
+
+## OAuth 42
+
+Configura estas variables en `.env` para habilitar login con 42:
+
+```env
+OAUTH_42_CLIENT_ID=...
+OAUTH_42_CLIENT_SECRET=...
+OAUTH_42_REDIRECT_URI=http://127.0.0.1:3000/auth/oauth/42/callback
+OAUTH_42_AUTHORIZE_URL=https://api.intra.42.fr/oauth/authorize
+OAUTH_42_TOKEN_URL=https://api.intra.42.fr/oauth/token
+OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
+```
+
+Flujo resumido:
+
+1. `GET /auth/oauth/42` redirige a 42 con `state`.
+2. `GET /auth/oauth/42/callback` valida `state`, intercambia `code`, obtiene perfil y resuelve usuario local.
+3. Si el usuario local tiene 2FA activo, responde `requires_2fa`.
+4. Si no, crea sesion local con cookie.
+
 ## Estado actual
 
-La app mantiene repositorios en memoria para tests y desarrollo sin base de datos. Con `DATABASE_URL`, usa PostgreSQL para usuarios, credenciales, sesiones, challenges 2FA, TOTP y recovery codes.
+La app mantiene repositorios en memoria para tests y desarrollo sin base de datos. Con `DATABASE_URL`, usa PostgreSQL para usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery codes, estados OAuth y cuentas OAuth enlazadas.
 
 ## Endpoints iniciales
 
@@ -71,6 +93,8 @@ La app mantiene repositorios en memoria para tests y desarrollo sin base de dato
 - `POST /auth/register`
 - `POST /auth/login`
 - `POST /auth/login/2fa`
+- `GET /auth/oauth/42`
+- `GET /auth/oauth/42/callback`
 - `POST /auth/logout`
 - `POST /auth/reauthenticate`
 - `POST /auth/password/change`
