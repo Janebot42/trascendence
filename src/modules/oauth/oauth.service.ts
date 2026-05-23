@@ -3,24 +3,118 @@ import { securityConfig } from '../../config/security.js';
 import { hashToken } from '../../shared/crypto/hashToken.js';
 import { randomToken } from '../../shared/crypto/randomToken.js';
 import { badRequest, conflict, unauthorized } from '../../shared/errors/httpErrors.js';
+import type { AuthRepository } from '../auth/auth.repository.js';
 import type { AuthService } from '../auth/auth.service.js';
 import type { UsersService } from '../users/users.service.js';
 import type { OAuthRepository } from './oauth.repository.js';
-import type { FortyTwoProfile, OAuthCallbackResult } from './oauth.types.js';
+import type { FortyTwoProfile, OAuthCallbackResult, OAuthLinkResult, OAuthUnlinkResult } from './oauth.types.js';
 
 export class OAuthService {
   constructor(
     private readonly oauthRepository: OAuthRepository,
     private readonly usersService: UsersService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly authRepository: AuthRepository
   ) {}
 
   async startFortyTwoLogin() {
+    return this.createAuthorizationRequest({ purpose: 'login', initiatingUserId: null });
+  }
+
+  async startFortyTwoLink(input: { userId: string }) {
+    return this.createAuthorizationRequest({ purpose: 'link', initiatingUserId: input.userId });
+  }
+
+  async completeFortyTwoCallback(input: {
+    code?: string;
+    state?: string;
+    browserState?: string | null;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }): Promise<OAuthCallbackResult> {
+    this.assertConfigured();
+    const stateRecord = await this.consumeAndValidateState({
+      code: input.code,
+      state: input.state,
+      browserState: input.browserState,
+      expectedPurpose: 'login'
+    });
+    if (stateRecord.initiatingUserId) throw unauthorized('Invalid OAuth state');
+
+    const accessToken = await this.exchangeCodeForAccessToken(input.code!);
+    const profile = await this.fetchFortyTwoProfile(accessToken);
+    const user = await this.resolveLocalUser(profile);
+
+    return this.authService.completeTrustedLogin({
+      userId: user.id,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent
+    });
+  }
+
+  async completeFortyTwoLinkCallback(input: {
+    code?: string;
+    state?: string;
+    browserState?: string | null;
+    currentUserId: string;
+  }): Promise<OAuthLinkResult> {
+    this.assertConfigured();
+    const stateRecord = await this.consumeAndValidateState({
+      code: input.code,
+      state: input.state,
+      browserState: input.browserState,
+      expectedPurpose: 'link'
+    });
+
+    if (!stateRecord.initiatingUserId || stateRecord.initiatingUserId !== input.currentUserId) {
+      throw unauthorized('Invalid OAuth state');
+    }
+
+    const accessToken = await this.exchangeCodeForAccessToken(input.code!);
+    const profile = await this.fetchFortyTwoProfile(accessToken);
+    const providerUserId = String(profile.id);
+    const existingAccount = await this.oauthRepository.findAccountByProviderUserId('42', providerUserId);
+
+    if (existingAccount) {
+      if (existingAccount.userId !== input.currentUserId) {
+        throw conflict('This OAuth account already belongs to another user', 'OAUTH_ALREADY_LINKED_TO_OTHER_USER');
+      }
+      return { ok: true, linked: true, alreadyLinked: true };
+    }
+
+    await this.oauthRepository.createAccount({
+      userId: input.currentUserId,
+      provider: '42',
+      providerUserId,
+      providerLogin: profile.login,
+      providerEmail: profile.email?.toLowerCase() ?? null
+    });
+
+    return { ok: true, linked: true, alreadyLinked: false };
+  }
+
+  async unlinkFortyTwo(input: { userId: string }): Promise<OAuthUnlinkResult> {
+    const account = await this.oauthRepository.findAccountByUserIdAndProvider(input.userId, '42');
+    if (!account) throw conflict('OAuth account is not linked', 'OAUTH_NOT_LINKED');
+
+    const hasPassword = Boolean(await this.authRepository.findPasswordCredential(input.userId));
+    const oauthCount = await this.oauthRepository.countAccountsForUser(input.userId);
+    if (!hasPassword && oauthCount <= 1) {
+      throw conflict('This account would lose all access methods', 'OAUTH_UNLINK_FORBIDDEN');
+    }
+
+    await this.oauthRepository.deleteAccount(account.id);
+    return { ok: true, unlinked: true };
+  }
+
+  private async createAuthorizationRequest(input: { purpose: 'login' | 'link'; initiatingUserId: string | null }) {
     this.assertConfigured();
 
     const state = randomToken(24);
     await this.oauthRepository.createState({
       provider: '42',
+      purpose: input.purpose,
+      initiatingUserId: input.initiatingUserId,
       stateTokenHash: hashToken(state),
       redirectTo: null,
       expiresAt: new Date(Date.now() + securityConfig.oauthStateTtlMs)
@@ -34,33 +128,23 @@ export class OAuthService {
     return { authorizationUrl: authorizeUrl.toString(), state };
   }
 
-  async completeFortyTwoCallback(input: {
+  private async consumeAndValidateState(input: {
     code?: string;
     state?: string;
     browserState?: string | null;
-    ipAddress?: string | null;
-    userAgent?: string | null;
-  }): Promise<OAuthCallbackResult> {
-    this.assertConfigured();
+    expectedPurpose: 'login' | 'link';
+  }) {
     if (!input.code || !input.state) throw badRequest('Missing OAuth callback parameters');
     if (!input.browserState || input.browserState !== input.state) {
       throw unauthorized('OAuth login session mismatch');
     }
 
     const stateRecord = await this.oauthRepository.consumeStateByTokenHash(hashToken(input.state));
-    if (!stateRecord || stateRecord.expiresAt <= new Date()) {
+    if (!stateRecord || stateRecord.expiresAt <= new Date() || stateRecord.purpose !== input.expectedPurpose) {
       throw unauthorized('Invalid OAuth state');
     }
 
-    const accessToken = await this.exchangeCodeForAccessToken(input.code);
-    const profile = await this.fetchFortyTwoProfile(accessToken);
-    const user = await this.resolveLocalUser(profile);
-
-    return this.authService.completeTrustedLogin({
-      userId: user.id,
-      ipAddress: input.ipAddress,
-      userAgent: input.userAgent
-    });
+    return stateRecord;
   }
 
   private async exchangeCodeForAccessToken(code: string): Promise<string> {

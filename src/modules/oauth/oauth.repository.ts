@@ -5,7 +5,10 @@ export interface OAuthRepository {
   createState(input: Omit<OAuthStateRecord, 'id' | 'createdAt' | 'consumedAt'>): Promise<OAuthStateRecord>;
   consumeStateByTokenHash(tokenHash: string): Promise<OAuthStateRecord | null>;
   findAccountByProviderUserId(provider: OAuthProvider, providerUserId: string): Promise<OAuthAccountRecord | null>;
+  findAccountByUserIdAndProvider(userId: string, provider: OAuthProvider): Promise<OAuthAccountRecord | null>;
+  countAccountsForUser(userId: string): Promise<number>;
   createAccount(input: Omit<OAuthAccountRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<OAuthAccountRecord>;
+  deleteAccount(id: string): Promise<void>;
 }
 
 export class InMemoryOAuthRepository implements OAuthRepository {
@@ -38,6 +41,14 @@ export class InMemoryOAuthRepository implements OAuthRepository {
     );
   }
 
+  async findAccountByUserIdAndProvider(userId: string, provider: OAuthProvider): Promise<OAuthAccountRecord | null> {
+    return [...this.accounts.values()].find((account) => account.userId === userId && account.provider === provider) ?? null;
+  }
+
+  async countAccountsForUser(userId: string): Promise<number> {
+    return [...this.accounts.values()].filter((account) => account.userId === userId).length;
+  }
+
   async createAccount(input: Omit<OAuthAccountRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<OAuthAccountRecord> {
     const now = new Date();
     const record: OAuthAccountRecord = {
@@ -48,5 +59,9 @@ export class InMemoryOAuthRepository implements OAuthRepository {
     };
     this.accounts.set(record.id, record);
     return record;
+  }
+
+  async deleteAccount(id: string): Promise<void> {
+    this.accounts.delete(id);
   }
 }

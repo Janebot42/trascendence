@@ -1,6 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { clearOAuthStateCookie, setOAuthStateCookie, setSessionCookie } from '../../shared/http/cookies.js';
 import { securityConfig } from '../../config/security.js';
+import { forbidden } from '../../shared/errors/httpErrors.js';
+import { requireAuth } from '../authorization/requireAuth.js';
+import type { SessionsService } from '../sessions/sessions.service.js';
 import type { OAuthService } from './oauth.service.js';
 
 function getUserAgent(header: string | string[] | undefined): string | null {
@@ -17,7 +20,18 @@ function toPublicResult(result: Awaited<ReturnType<OAuthService['completeFortyTw
   };
 }
 
-export async function registerOAuthRoutes(app: FastifyInstance, oauthService: OAuthService) {
+function assertRecentReauthentication(request: FastifyRequest): void {
+  const reauthenticatedAt = request.currentSession!.reauthenticatedAt;
+  if (!reauthenticatedAt || Date.now() - reauthenticatedAt.getTime() > securityConfig.sensitiveActionTtlMs) {
+    throw forbidden('Recent reauthentication required', 'REAUTHENTICATION_REQUIRED');
+  }
+}
+
+export async function registerOAuthRoutes(
+  app: FastifyInstance,
+  oauthService: OAuthService,
+  sessionsService: SessionsService
+) {
   app.get('/auth/oauth/42', async (_request, reply) => {
     const { authorizationUrl, state } = await oauthService.startFortyTwoLogin();
     setOAuthStateCookie(reply, state);
@@ -45,5 +59,35 @@ export async function registerOAuthRoutes(app: FastifyInstance, oauthService: OA
       clearOAuthStateCookie(reply);
       throw error;
     }
+  });
+
+  app.post('/auth/oauth/42/link/start', { preHandler: requireAuth(sessionsService) }, async (request, reply) => {
+    assertRecentReauthentication(request);
+    const { authorizationUrl, state } = await oauthService.startFortyTwoLink({ userId: request.currentUser!.id });
+    setOAuthStateCookie(reply, state);
+    return reply.redirect(authorizationUrl);
+  });
+
+  app.get('/auth/oauth/42/link/callback', { preHandler: requireAuth(sessionsService) }, async (request, reply) => {
+    const query = request.query as { code?: string; state?: string };
+
+    try {
+      const result = await oauthService.completeFortyTwoLinkCallback({
+        code: query.code,
+        state: query.state,
+        browserState: request.cookies[securityConfig.oauthCookieName] ?? null,
+        currentUserId: request.currentUser!.id
+      });
+      clearOAuthStateCookie(reply);
+      return result;
+    } catch (error) {
+      clearOAuthStateCookie(reply);
+      throw error;
+    }
+  });
+
+  app.delete('/auth/oauth/42/link', { preHandler: requireAuth(sessionsService) }, async (request) => {
+    assertRecentReauthentication(request);
+    return oauthService.unlinkFortyTwo({ userId: request.currentUser!.id });
   });
 }

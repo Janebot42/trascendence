@@ -96,6 +96,8 @@ Owns OAuth 42 integration:
 
 OAuth is treated as another first-factor entry point. It does not replace local session management.
 
+The module also owns explicit account linking and unlinking for provider 42. That flow is separate from login: it requires an already authenticated local session plus recent strong reauthentication.
+
 ### `authorization`
 
 Owns request guards:
@@ -133,13 +135,33 @@ admin
 ### Login with OAuth 42
 
 1. User hits `/auth/oauth/42`.
-2. Backend creates an OAuth `state` record and redirects to 42.
-3. Callback validates `state` and consumes it.
+2. Backend creates an OAuth `state` record with `purpose=login` and redirects to 42.
+3. Callback validates `state`, validates the temporary browser cookie and consumes the state.
 4. Backend exchanges `code` for an access token.
 5. Backend fetches the 42 profile.
 6. Backend resolves an existing linked account or creates a new local user. It does not auto-link by email to an existing password account.
 7. If local 2FA is disabled, create the final session.
 8. If local 2FA is enabled, create a local `login_challenge` and require TOTP.
+
+### Account link with OAuth 42
+
+1. User must already be authenticated locally.
+2. User must recently reauthenticate for a sensitive action.
+3. Backend starts OAuth with `purpose=link` and stores `initiating_user_id` in `oauth_states`.
+4. Link callback validates cookie + state + purpose + initiating user.
+5. If the 42 identity is unlinked, backend creates the `oauth_accounts` row.
+6. If the 42 identity already belongs to the same user, the operation is idempotent.
+7. If the 42 identity belongs to another user, backend fails with `OAUTH_ALREADY_LINKED_TO_OTHER_USER`.
+8. Linking never creates a new login session.
+
+### Account unlink with OAuth 42
+
+1. User must already be authenticated locally.
+2. User must recently reauthenticate for a sensitive action.
+3. Backend finds the linked `oauth_accounts` row for provider 42.
+4. Backend checks whether removing it would leave the account without a viable access method.
+5. If no password credential and no other OAuth method would remain, unlink fails with `OAUTH_UNLINK_FORBIDDEN`.
+6. Otherwise the link is deleted.
 
 This keeps OAuth as identity proof and local sessions as the actual app authentication state.
 
@@ -201,9 +223,13 @@ two_factor_totp
 recovery_codes
 oauth_states
 oauth_accounts
+
+`oauth_states` now carries both the provider and the purpose of the flow (`login` or `link`), plus an optional `initiating_user_id` for linking.
 ```
 
 The migration is idempotent and runs on startup when PostgreSQL is enabled.
+
+This split matters: login and linking must not share a callback meaning just because they both happen to pass through the same provider.
 
 ## Environment
 

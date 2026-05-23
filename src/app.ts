@@ -80,13 +80,14 @@ export async function buildApp() {
     sessionsService,
     twoFactorService
   );
-  const oauthService = new OAuthService(oauthRepository, usersService, authService);
+  const oauthService = new OAuthService(oauthRepository, usersService, authService, authRepository);
 
   if (env.NODE_ENV === 'test') {
     app.decorate('testContext', {
       oauthRepository,
       usersService,
       authService,
+      authRepository,
       twoFactorService,
       sessionsService
     });
@@ -106,7 +107,7 @@ export async function buildApp() {
   app.get('/health', async () => ({ ok: true }));
   await registerUiRoutes(app);
   await registerAuthRoutes(app, authService, sessionsService);
-  await registerOAuthRoutes(app, oauthService);
+  await registerOAuthRoutes(app, oauthService, sessionsService);
   await registerTwoFactorRoutes(app, twoFactorService, sessionsService);
   await registerUserRoutes(app, sessionsService, usersService);
 

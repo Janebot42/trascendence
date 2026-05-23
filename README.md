@@ -16,7 +16,7 @@ Backend unico modular para usuarios, autenticacion, sesiones, login OAuth 42, 2F
 - `auth`: registro, login, challenges 2FA, reautenticacion y cambio de password.
 - `sessions`: sesiones opacas de servidor y cookie segura.
 - `two_factor`: TOTP, provisioning URI y recovery codes.
-- `oauth`: inicio de login OAuth 42, validacion de state y callback.
+- `oauth`: inicio de login OAuth 42, validacion de state, callback y gestion explicita de link/unlink de cuenta 42.
 - `authorization`: `requireAuth` y `requireRole`.
 
 ## Arranque local
@@ -79,7 +79,14 @@ Flujo resumido:
 2. `GET /auth/oauth/42/callback` valida `state` y la cookie temporal del navegador, intercambia `code`, obtiene perfil y resuelve usuario local.
 3. Si el usuario local tiene 2FA activo, responde `requires_2fa`.
 4. Si el email ya pertenece a una cuenta local no enlazada, falla con conflicto en vez de enlazar automaticamente.
-4. Si no, crea sesion local con cookie.
+5. Si no, crea sesion local con cookie.
+
+Flujo de linking/unlinking:
+
+1. `POST /auth/oauth/42/link/start` solo funciona con sesion autenticada y reautenticacion fuerte reciente.
+2. `GET /auth/oauth/42/link/callback` usa un `state` distinto (`purpose=link`) y enlaza la identidad 42 a la cuenta autenticada actual.
+3. Si esa identidad 42 ya pertenece a otro usuario, falla con `OAUTH_ALREADY_LINKED_TO_OTHER_USER`.
+4. `DELETE /auth/oauth/42/link` solo permite unlink si la cuenta conserva al menos un metodo de acceso viable.
 
 ## Estado actual
 
@@ -96,6 +103,9 @@ La app mantiene repositorios en memoria para tests y desarrollo sin base de dato
 - `POST /auth/login/2fa`
 - `GET /auth/oauth/42`
 - `GET /auth/oauth/42/callback`
+- `POST /auth/oauth/42/link/start`
+- `GET /auth/oauth/42/link/callback`
+- `DELETE /auth/oauth/42/link`
 - `POST /auth/logout`
 - `POST /auth/reauthenticate`
 - `POST /auth/password/change`
@@ -124,3 +134,5 @@ La pantalla permite probar registro, login, logout, `/me`, reautenticacion, camb
 - Desactivar 2FA revoca otras sesiones del usuario.
 - Cambiar password revoca otras sesiones del usuario.
 - Acciones sensibles requieren reautenticacion reciente.
+- OAuth login y OAuth linking usan callbacks separados y `state` con proposito explicito.
+- El unlink de OAuth 42 se bloquea si dejaria la cuenta sin password local ni otro acceso viable.
