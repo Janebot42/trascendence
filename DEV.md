@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This backend is a modular monolith for a Transcendence-style project. It focuses on users, password authentication, server-side sessions, optional TOTP 2FA, recovery codes and simple role-based authorization.
+This backend is a modular monolith for a Transcendence-style project. It focuses on users, password authentication, OAuth 42 login, server-side sessions, optional TOTP 2FA, recovery codes and simple role-based authorization.
 
-The project intentionally avoids JWT as the main auth mechanism, OAuth, social login, microservices, CQRS, event sourcing and advanced ACLs. Those are not needed for the current problem.
+The project intentionally avoids JWT as the main auth mechanism, microservices, CQRS, event sourcing and advanced ACLs. It keeps the auth surface narrow: local password login, OAuth 42, local sessions and local TOTP.
 
 ## Stack
 
@@ -29,6 +29,7 @@ src/modules/
   auth/
   sessions/
   two_factor/
+  oauth/
   authorization/
 ```
 
@@ -82,6 +83,21 @@ Owns TOTP and recovery codes:
 - consume recovery code once
 - disable 2FA
 
+### `oauth`
+
+Owns OAuth 42 integration:
+
+- start authorization redirect
+- generate and validate `state`
+- exchange authorization code for access token
+- fetch 42 profile
+- resolve or create the local user
+- hand off to local session / 2FA flow
+
+OAuth is treated as another first-factor entry point. It does not replace local session management.
+
+The module also owns explicit account linking and unlinking for provider 42. That flow is separate from login: it requires an already authenticated local session plus recent strong reauthentication.
+
 ### `authorization`
 
 Owns request guards:
@@ -115,6 +131,39 @@ admin
 3. Verify password hash.
 4. If 2FA is disabled, create final session.
 5. Send session cookie.
+
+### Login with OAuth 42
+
+1. User hits `/auth/oauth/42`.
+2. Backend creates an OAuth `state` record with `purpose=login` and redirects to 42.
+3. Callback validates `state`, validates the temporary browser cookie and consumes the state.
+4. Backend exchanges `code` for an access token.
+5. Backend fetches the 42 profile.
+6. Backend resolves an existing linked account or creates a new local user. It does not auto-link by email to an existing password account.
+7. If local 2FA is disabled, create the final session.
+8. If local 2FA is enabled, create a local `login_challenge` and require TOTP.
+
+### Account link with OAuth 42
+
+1. User must already be authenticated locally.
+2. User must recently reauthenticate for a sensitive action.
+3. Backend starts OAuth with `purpose=link` and stores `initiating_user_id` in `oauth_states`.
+4. Link callback validates cookie + state + purpose + initiating user.
+5. If the 42 identity is unlinked, backend creates the `oauth_accounts` row.
+6. If the 42 identity already belongs to the same user, the operation is idempotent.
+7. If the 42 identity belongs to another user, backend fails with `OAUTH_ALREADY_LINKED_TO_OTHER_USER`.
+8. Linking never creates a new login session.
+
+### Account unlink with OAuth 42
+
+1. User must already be authenticated locally.
+2. User must recently reauthenticate for a sensitive action.
+3. Backend finds the linked `oauth_accounts` row for provider 42.
+4. Backend checks whether removing it would leave the account without a viable access method.
+5. If no password credential and no other OAuth method would remain, unlink fails with `OAUTH_UNLINK_FORBIDDEN`.
+6. Otherwise the link is deleted.
+
+This keeps OAuth as identity proof and local sessions as the actual app authentication state.
 
 ### Login with 2FA
 
@@ -172,9 +221,15 @@ sessions
 login_challenges
 two_factor_totp
 recovery_codes
+oauth_states
+oauth_accounts
+
+`oauth_states` now carries both the provider and the purpose of the flow (`login` or `link`), plus an optional `initiating_user_id` for linking.
 ```
 
 The migration is idempotent and runs on startup when PostgreSQL is enabled.
+
+This split matters: login and linking must not share a callback meaning just because they both happen to pass through the same provider.
 
 ## Environment
 
@@ -184,6 +239,17 @@ Required:
 
 ```env
 TOTP_ENCRYPTION_KEY_BASE64=...
+```
+
+For OAuth 42:
+
+```env
+OAUTH_42_CLIENT_ID=...
+OAUTH_42_CLIENT_SECRET=...
+OAUTH_42_REDIRECT_URI=http://127.0.0.1:3000/auth/oauth/42/callback
+OAUTH_42_AUTHORIZE_URL=https://api.intra.42.fr/oauth/authorize
+OAUTH_42_TOKEN_URL=https://api.intra.42.fr/oauth/token
+OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
 ```
 
 Generate it with:

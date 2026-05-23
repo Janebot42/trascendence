@@ -6,6 +6,7 @@ export interface UsersRepository {
   create(input: CreateUserInput): Promise<User>;
   findById(id: string): Promise<User | null>;
   findByUsername(username: string): Promise<User | null>;
+  findByEmail(email: string): Promise<User | null>;
   list(): Promise<User[]>;
 }
 
@@ -41,6 +42,11 @@ export class InMemoryUsersRepository implements UsersRepository {
   async findByUsername(username: string): Promise<User | null> {
     const normalizedUsername = username.trim().toLowerCase();
     return [...this.users.values()].find((user) => user.username === normalizedUsername) ?? null;
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    return [...this.users.values()].find((user) => user.email === normalizedEmail) ?? null;
   }
 
   async list(): Promise<User[]> {

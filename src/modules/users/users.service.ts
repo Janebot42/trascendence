@@ -16,6 +16,10 @@ export class UsersService {
     return this.usersRepository.findByUsername(username);
   }
 
+  findByEmail(email: string): Promise<User | null> {
+    return this.usersRepository.findByEmail(email);
+  }
+
   listUsers(): Promise<User[]> {
     return this.usersRepository.list();
   }

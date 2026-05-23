@@ -67,3 +67,31 @@ create table if not exists recovery_codes (
 );
 
 create index if not exists recovery_codes_user_id_idx on recovery_codes(user_id);
+
+create table if not exists oauth_accounts (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  provider text not null check (provider in ('42')),
+  provider_user_id text not null,
+  provider_login text,
+  provider_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (provider, provider_user_id)
+);
+
+create index if not exists oauth_accounts_user_id_idx on oauth_accounts(user_id);
+
+create table if not exists oauth_states (
+  id text primary key,
+  provider text not null check (provider in ('42')),
+  purpose text not null default 'login' check (purpose in ('login', 'link')),
+  initiating_user_id text references users(id) on delete cascade,
+  state_token_hash text not null unique,
+  redirect_to text,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  consumed_at timestamptz
+);
+
+create index if not exists oauth_states_expires_at_idx on oauth_states(expires_at);

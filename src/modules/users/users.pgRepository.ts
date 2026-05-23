@@ -39,6 +39,11 @@ export class PgUsersRepository implements UsersRepository {
     return result.rowCount ? mapUser(result.rows[0]) : null;
   }
 
+  async findByEmail(email: string): Promise<User | null> {
+    const result = await this.pool.query('select * from users where email = $1', [email.trim().toLowerCase()]);
+    return result.rowCount ? mapUser(result.rows[0]) : null;
+  }
+
   async list(): Promise<User[]> {
     const result = await this.pool.query('select * from users order by created_at desc');
     return result.rows.map(mapUser);
