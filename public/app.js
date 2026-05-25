@@ -203,4 +203,32 @@ document.querySelector('#passwordForm').addEventListener('submit', async (event)
   }
 });
 
+// OAuth 42 Login button
+document.querySelector('#oauth42Login').addEventListener('click', () => {
+  window.location.href = '/auth/oauth/42';
+});
+
+// Link 42 Account button
+document.querySelector('#link42').addEventListener('click', async () => {
+  try {
+    // This will redirect to the OAuth flow for linking
+    window.location.href = '/auth/oauth/42/link/start';
+  } catch (error) {
+    log('Link 42 failed', error.data ?? { message: error.message });
+  }
+});
+
+// Unlink 42 Account button
+document.querySelector('#unlink42').addEventListener('click', async () => {
+  try {
+    const data = await api('/auth/oauth/42/link', {
+      method: 'DELETE'
+    });
+    document.getElementById('oauthStatus').textContent = 'Not linked';
+    log('Unlinked 42 account', data);
+  } catch (error) {
+    log('Unlink 42 failed', error.data ?? { message: error.message });
+  }
+});
+
 refreshMe();

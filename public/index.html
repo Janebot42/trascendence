@@ -45,6 +45,8 @@
             <input name="password" type="password" autocomplete="current-password" value="correct horse battery staple" required />
           </label>
           <button type="submit">Login</button>
+          <div class="divider"><span>or</span></div>
+          <button type="button" id="oauth42Login" class="oauth-button">Login with 42</button>
         </form>
 
         <form class="panel hidden" id="secondFactorForm">
@@ -132,6 +134,15 @@
           </label>
           <button type="submit">Change password</button>
         </form>
+
+        <section class="panel">
+          <h2>OAuth 42 Link</h2>
+          <div class="actions">
+            <button type="button" id="link42">Link 42 Account</button>
+            <button type="button" id="unlink42">Unlink 42 Account</button>
+          </div>
+          <pre id="oauthStatus">Not linked</pre>
+        </section>
       </section>
 
       <section class="panel log-panel">

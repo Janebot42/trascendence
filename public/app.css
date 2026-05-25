@@ -192,3 +192,32 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.divider span {
+  padding: 0 8px;
+}
+
+.oauth-button {
+  width: 100%;
+  background: #1769aa;
+}
+
+.oauth-button:hover {
+  background: #0f4f83;
+}

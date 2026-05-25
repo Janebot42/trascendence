@@ -30,6 +30,7 @@ import { InMemoryOAuthRepository } from './modules/oauth/oauth.repository.js';
 import { PgOAuthRepository } from './modules/oauth/oauth.pgRepository.js';
 import { OAuthService } from './modules/oauth/oauth.service.js';
 import { registerOAuthRoutes } from './modules/oauth/oauth.routes.js';
+import { registerMockOAuthRoutes } from './modules/oauth/mock/mockOAuth.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: env.NODE_ENV !== 'test' });
@@ -105,6 +106,12 @@ export async function buildApp() {
   });
 
   app.get('/health', async () => ({ ok: true }));
+  
+  // Register mock OAuth routes for testing (only in development)
+  if (env.NODE_ENV === 'development') {
+    await registerMockOAuthRoutes(app);
+  }
+  
   await registerUiRoutes(app);
   await registerAuthRoutes(app, authService, sessionsService);
   await registerOAuthRoutes(app, oauthService, sessionsService);
