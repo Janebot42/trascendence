@@ -484,3 +484,21 @@ These are acceptable for the current base. The next most useful backend improvem
 4. Add email verification.
 5. Improve rate limiting with Redis or PostgreSQL-backed counters.
 
+
+Justificaría el uso de TypeScript en este proyecto (especialmente uno que simula una API OAuth y maneja autenticación) basándome en estos 4 pilares fundamentales:
+1. Seguridad de Tipos en la Autenticación (Crítico)
+En un sistema de login/OAuth, manejar mal los datos (ej. tratar un id como string cuando es número, o esperar un campo email que no existe) puede romper todo el flujo o crear brechas de seguridad.
+Con TypeScript: Definimos interfaces estrictas para el usuario (IUser), el token (IToken) y la respuesta de la API. El compilador nos avisa antes de ejecutar si estamos accediendo a una propiedad incorrecta.
+Ejemplo: Si el mock devuelve un objeto sin el campo intra_name, TypeScript lanza error en tiempo de desarrollo, evitando que la app falle en producción con un undefined.
+2. Documentación Viva y Autocompletado
+Al trabajar con estructuras de datos complejas (como las respuestas de la API de 42), TypeScript actúa como documentación automática.
+Al escribir código, el IDE sabe exactamente qué métodos y propiedades están disponibles.
+Esto acelera el desarrollo del Mock: al definir interface MockUser, cualquier desarrollador que use esa función sabe exactamente qué datos simulados va a recibir sin tener que leer el código fuente de la implementación.
+3. Refactorización Segura
+En fases de prueba y desarrollo (como la creación de la rama qwenversion), los requisitos cambian rápido.
+Si decidimos cambiar el tipo de dato del ID de number a string, TypeScript identifica instantáneamente todos los archivos donde ese cambio rompe el código.
+En JavaScript puro, tendrías que ejecutar todos los tests o navegar manualmente archivo por archivo esperando encontrar el error en tiempo de ejecución.
+4. Detección Temprana de Errores ("Shift Left")
+El objetivo del Mock es probar funcionalidades sin la API real.
+TypeScript mueve la detección de errores del momento de la ejecución (cuando el usuario hace click y falla) al momento de la escritura (mientras codificas).
+Esto reduce drásticamente el tiempo de depuración (debugging) y hace que los tests (como los 20 que pasaron) sean más robustos, ya que eliminan toda una categoría de errores tontos (typos, tipos incorrectos).
