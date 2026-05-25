@@ -63,7 +63,6 @@ Al arrancar, el backend ejecuta la migracion base idempotente de `db/migrations/
 ## OAuth 42
 
 Configura estas variables en `.env` para habilitar login con 42:
-
 ```env
 OAUTH_42_CLIENT_ID=...
 OAUTH_42_CLIENT_SECRET=...
@@ -72,6 +71,10 @@ OAUTH_42_AUTHORIZE_URL=https://api.intra.42.fr/oauth/authorize
 OAUTH_42_TOKEN_URL=https://api.intra.42.fr/oauth/token
 OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
 ```
+
+Para usar el mock en local, asegúrate de tener NODE_ENV=development en tu archivo .env. 
+Puedes crear un Pull Request desde la rama qwenversion a main en GitHub. 
+El sistema está listo para probar todas las funcionalidades OAuth sin necesidad de conectarte a la API real de 42.
 
 Flujo resumido:
 
