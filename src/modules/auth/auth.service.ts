@@ -35,11 +35,16 @@ export class AuthService {
       username: input.username,
       email: input.email ?? null
     });
-    await this.authRepository.createPasswordCredential({
-      userId: user.id,
-      passwordHash: await this.passwordHasher.hash(input.password),
-      passwordUpdatedAt: new Date()
-    });
+    try {
+      await this.authRepository.createPasswordCredential({
+        userId: user.id,
+        passwordHash: await this.passwordHasher.hash(input.password),
+        passwordUpdatedAt: new Date()
+      });
+    } catch (error) {
+      await this.usersService.deleteUser(user.id);
+      throw error;
+    }
 
     const createdSession = await this.sessionsService.createSession({
       userId: user.id,
@@ -136,7 +141,10 @@ export class AuthService {
 
     if (!ok) throw unauthorized('Invalid second factor');
 
-    await this.authRepository.consumeLoginChallenge(challenge.id);
+    if (!(await this.authRepository.consumeLoginChallenge(challenge.id))) {
+      throw unauthorized('Invalid or expired login challenge');
+    }
+
     const user = await this.usersService.findById(challenge.userId);
     if (!user || user.status !== 'active') throw unauthorized();
 

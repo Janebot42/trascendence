@@ -4,6 +4,7 @@ import type { Session } from './sessions.types.js';
 export interface SessionsRepository {
   create(input: Omit<Session, 'id' | 'createdAt' | 'lastSeenAt' | 'revokedAt'>): Promise<Session>;
   findByTokenHash(tokenHash: string): Promise<Session | null>;
+  touchLastSeen(sessionId: string): Promise<void>;
   revokeByTokenHash(tokenHash: string): Promise<void>;
   revokeOtherUserSessions(userId: string, keepSessionId: string): Promise<void>;
   markReauthenticated(sessionId: string): Promise<void>;
@@ -29,6 +30,11 @@ export class InMemorySessionsRepository implements SessionsRepository {
     return [...this.sessions.values()].find((session) => session.tokenHash === tokenHash) ?? null;
   }
 
+  async touchLastSeen(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) session.lastSeenAt = new Date();
+  }
+
   async revokeByTokenHash(tokenHash: string): Promise<void> {
     const session = await this.findByTokenHash(tokenHash);
     if (session && !session.revokedAt) session.revokedAt = new Date();
@@ -47,4 +53,3 @@ export class InMemorySessionsRepository implements SessionsRepository {
     if (session) session.reauthenticatedAt = new Date();
   }
 }
-

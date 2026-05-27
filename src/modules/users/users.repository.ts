@@ -4,6 +4,7 @@ import type { CreateUserInput, User } from './users.types.js';
 
 export interface UsersRepository {
   create(input: CreateUserInput): Promise<User>;
+  delete(id: string): Promise<void>;
   findById(id: string): Promise<User | null>;
   findByUsername(username: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
@@ -33,6 +34,10 @@ export class InMemoryUsersRepository implements UsersRepository {
     };
     this.users.set(user.id, user);
     return user;
+  }
+
+  async delete(id: string): Promise<void> {
+    this.users.delete(id);
   }
 
   async findById(id: string): Promise<User | null> {

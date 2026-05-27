@@ -36,6 +36,7 @@ export class SessionsService {
     const user = await this.usersService.findById(session.userId);
     if (!user || user.status !== 'active') return null;
 
+    await this.sessionsRepository.touchLastSeen(session.id);
     return { session, user };
   }
 
@@ -51,4 +52,3 @@ export class SessionsService {
     return this.sessionsRepository.markReauthenticated(sessionId);
   }
 }
-

@@ -27,6 +27,10 @@ export class PgUsersRepository implements UsersRepository {
     }
   }
 
+  async delete(id: string): Promise<void> {
+    await this.pool.query('delete from users where id = $1', [id]);
+  }
+
   async findById(id: string): Promise<User | null> {
     const result = await this.pool.query('select * from users where id = $1', [id]);
     return result.rowCount ? mapUser(result.rows[0]) : null;
@@ -53,4 +57,3 @@ export class PgUsersRepository implements UsersRepository {
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
 }
-

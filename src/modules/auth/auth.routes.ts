@@ -9,13 +9,18 @@ import { requireAuth } from '../authorization/requireAuth.js';
 import type { LoginResult } from './auth.types.js';
 
 const registerSchema = z.object({
-  username: z.string().min(3).max(32),
+  username: z
+    .string()
+    .trim()
+    .min(3)
+    .max(32)
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Username may only contain letters, numbers, underscores, and dashes'),
   email: z.string().email().optional(),
   password: z.string().min(12)
 });
 
 const loginSchema = z.object({
-  username: z.string().min(3).max(32),
+  username: z.string().trim().min(3).max(32),
   password: z.string().min(1)
 });
 

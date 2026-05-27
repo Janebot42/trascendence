@@ -47,13 +47,16 @@ export class PgAuthRepository implements AuthRepository {
     return result.rowCount ? mapLoginChallenge(result.rows[0]) : null;
   }
 
-  async consumeLoginChallenge(id: string): Promise<void> {
-    await this.pool.query(
+  async consumeLoginChallenge(id: string): Promise<boolean> {
+    const result = await this.pool.query(
       `update login_challenges
-       set consumed_at = coalesce(consumed_at, now())
-       where id = $1`,
+       set consumed_at = now()
+       where id = $1
+         and consumed_at is null
+         and expires_at > now()
+       returning *`,
       [id]
     );
+    return Boolean(result.rowCount);
   }
 }
-

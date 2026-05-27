@@ -8,6 +8,7 @@ import { runMigrations } from './db/migrate.js';
 import { AppError } from './shared/errors/AppError.js';
 import { SecretBox } from './shared/crypto/encryption.js';
 import { ScryptPasswordHasher } from './shared/crypto/passwordHasher.js';
+import { assertSameOriginForUnsafeRequest } from './shared/http/csrf.js';
 import { InMemoryUsersRepository } from './modules/users/users.repository.js';
 import { PgUsersRepository } from './modules/users/users.pgRepository.js';
 import { UsersService } from './modules/users/users.service.js';
@@ -50,6 +51,10 @@ export async function buildApp() {
   });
 
   await app.register(cookie);
+
+  app.addHook('preHandler', async (request) => {
+    assertSameOriginForUnsafeRequest(request);
+  });
 
   const pgPool = createPgPool();
   if (pgPool) {

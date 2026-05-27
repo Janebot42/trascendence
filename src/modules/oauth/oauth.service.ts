@@ -151,6 +151,7 @@ export class OAuthService {
     const response = await fetch(env.OAUTH_42_TOKEN_URL!, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(10_000),
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: env.OAUTH_42_CLIENT_ID!,
@@ -168,7 +169,8 @@ export class OAuthService {
 
   private async fetchFortyTwoProfile(accessToken: string): Promise<FortyTwoProfile> {
     const response = await fetch(env.OAUTH_42_ME_URL!, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000)
     });
 
     if (!response.ok) throw unauthorized('OAuth profile fetch failed');
@@ -200,23 +202,34 @@ export class OAuthService {
       displayName: profile.displayname ?? null
     });
 
-    await this.oauthRepository.createAccount({
-      userId: user.id,
-      provider: '42',
-      providerUserId: String(profile.id),
-      providerLogin: profile.login,
-      providerEmail: normalizedEmail
-    });
+    try {
+      await this.oauthRepository.createAccount({
+        userId: user.id,
+        provider: '42',
+        providerUserId: String(profile.id),
+        providerLogin: profile.login,
+        providerEmail: normalizedEmail
+      });
+    } catch (error) {
+      await this.usersService.deleteUser(user.id);
+      throw error;
+    }
 
     return user;
   }
 
   private async generateAvailableUsername(baseLogin: string): Promise<string> {
-    const normalizedBase = baseLogin.trim().toLowerCase();
+    const normalizedBase = baseLogin
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32) || 'user';
     if (!(await this.usersService.findByUsername(normalizedBase))) return normalizedBase;
 
     for (let suffix = 1; suffix <= 1000; suffix += 1) {
-      const candidate = `${normalizedBase}-${suffix}`;
+      const suffixText = `-${suffix}`;
+      const candidate = `${normalizedBase.slice(0, 32 - suffixText.length)}${suffixText}`;
       if (!(await this.usersService.findByUsername(candidate))) return candidate;
     }
 

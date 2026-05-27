@@ -1,15 +1,22 @@
-```
 # Dependencies
 node_modules/
 
 # Logs and temp files
 *.log
 *.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Environment
 .env
-.env.local
 .env.*
+!.env.example
+
+# Local agent/editor state
+.agents/
+.codex/
 
 # Editors
 .vscode/
@@ -24,9 +31,6 @@ __pycache__/
 .Python
 venv/
 .venv/
-.env
-.env.local
-.env.*
 .mypy_cache/
 .pytest_cache/
 .coverage
@@ -37,6 +41,7 @@ htmlcov/
 dist/
 build/
 target/
+*.tsbuildinfo
 *.out
 *.exe
 *.dll
@@ -71,4 +76,3 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```

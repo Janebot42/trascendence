@@ -83,22 +83,17 @@ export class PgTwoFactorRepository implements TwoFactorRepository {
     }
   }
 
-  async listActiveRecoveryCodes(userId: string): Promise<RecoveryCodeRecord[]> {
+  async consumeRecoveryCode(userId: string, codeHash: string): Promise<RecoveryCodeRecord | null> {
     const result = await this.pool.query(
-      `select * from recovery_codes
-       where user_id = $1 and used_at is null and replaced_at is null`,
-      [userId]
-    );
-    return result.rows.map(mapRecoveryCode);
-  }
-
-  async markRecoveryCodeUsed(id: string): Promise<void> {
-    await this.pool.query(
       `update recovery_codes
-       set used_at = coalesce(used_at, now())
-       where id = $1`,
-      [id]
+       set used_at = now()
+       where user_id = $1
+         and code_hash = $2
+         and used_at is null
+         and replaced_at is null
+       returning *`,
+      [userId, codeHash]
     );
+    return result.rowCount ? mapRecoveryCode(result.rows[0]) : null;
   }
 }
-

@@ -31,6 +31,10 @@ export class PgSessionsRepository implements SessionsRepository {
     return result.rowCount ? mapSession(result.rows[0]) : null;
   }
 
+  async touchLastSeen(sessionId: string): Promise<void> {
+    await this.pool.query('update sessions set last_seen_at = now() where id = $1', [sessionId]);
+  }
+
   async revokeByTokenHash(tokenHash: string): Promise<void> {
     await this.pool.query(
       `update sessions
@@ -53,4 +57,3 @@ export class PgSessionsRepository implements SessionsRepository {
     await this.pool.query('update sessions set reauthenticated_at = now() where id = $1', [sessionId]);
   }
 }
-

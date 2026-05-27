@@ -8,6 +8,10 @@ export class UsersService {
     return this.usersRepository.create(input);
   }
 
+  deleteUser(id: string): Promise<void> {
+    return this.usersRepository.delete(id);
+  }
+
   findById(id: string): Promise<User | null> {
     return this.usersRepository.findById(id);
   }

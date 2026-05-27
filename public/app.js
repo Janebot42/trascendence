@@ -211,8 +211,11 @@ document.querySelector('#oauth42Login').addEventListener('click', () => {
 // Link 42 Account button
 document.querySelector('#link42').addEventListener('click', async () => {
   try {
-    // This will redirect to the OAuth flow for linking
-    window.location.href = '/auth/oauth/42/link/start';
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/auth/oauth/42/link/start';
+    document.body.appendChild(form);
+    form.submit();
   } catch (error) {
     log('Link 42 failed', error.data ?? { message: error.message });
   }
