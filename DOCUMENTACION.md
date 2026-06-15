@@ -1,339 +1,379 @@
-# Documentación Completa del Proyecto Transcendence Backend
+# Documentación del Proyecto Transcendence Backend
 
-## 1. Introducción al Proyecto
+## 1. Introducción
 
-**Transcendence** es un backend moderno desarrollado para una aplicación web 
+Este backend es una base modular para el proyecto **Transcendence**. Actualmente cubre autenticación local, sesiones seguras, OAuth 42, 2FA TOTP, recovery codes y autorización básica por rol.
 
-### Tecnologías Principales
-- **Runtime:** Node.js (Entorno de ejecución para JavaScript en el servidor).
-- **Lenguaje:** TypeScript (Superset de JavaScript con tipado estático).
-- **Base de Datos:** PostgreSQL (Base de datos relacional robusta).
-- **Framework Web:** Fastify (Framework rápido y de baja sobrecarga para APIs).
-- **ORM:** Kysely (Constructor de consultas SQL type-safe para TypeScript).
-- **Autenticación:** Sesiones seguras mediante cookies HTTP-only y hashes de contraseñas (Argon2/Bcrypt).
+La prioridad de esta versión es mantener una arquitectura sencilla y rápida de extender para el resto del proyecto: juego, partidas, estadísticas, torneos, amistades/bloqueos y chat.
+
+## 2. Tecnologías principales
+
+- **Runtime:** Node.js.
+- **Lenguaje:** TypeScript.
+- **Framework HTTP:** Fastify.
+- **Base de datos:** SQLite.
+- **ORM:** Prisma.
+- **Validación:** Zod.
+- **Autenticación:** sesiones opacas de servidor mediante cookies HTTP-only.
+- **Hash de contraseñas:** `scrypt` de Node.js.
+- **2FA:** TOTP con `otplib`.
+
+La decisión importante es esta: **la persistencia real usa Prisma + SQLite**. Ya no se usa PostgreSQL manual ni `pg`.
 
 ---
 
-## 2. Conceptos Básicos de TypeScript (Para Principiantes)
+## 3. Conceptos básicos de TypeScript
 
-Si nunca has usado TypeScript, esta sección te ayudará a entender por qué lo usamos y cómo leer el código.
+TypeScript es JavaScript con tipos estáticos. Permite detectar errores antes de ejecutar el programa.
 
-### ¿Qué es TypeScript?
-Imagina que JavaScript es como escribir en un cuaderno sin reglas: puedes escribir "5" + "manzanas" y el programa intentará sumarlas aunque no tenga sentido. TypeScript añade reglas estrictas antes de que el programa se ejecute. Te obliga a definir qué tipo de dato es cada cosa (número, texto, booleano), evitando errores tontos.
+Ejemplo simple:
 
-### Diferencias Clave con Ejemplos
-
-#### A. Tipado Estático (La gran ventaja)
-En **JavaScript**, esto es válido pero peligroso:
-```javascript
-let edad = 25;
-edad = "veinticinco"; // ¡Error lógico! Ahora edad es texto, no número.
-
-En TypeScript, el compilador te detiene antes de ejecutar:
-typescript
+```ts
 let edad: number = 25;
-edad = "veinticinco"; 
-// ERROR: Type 'string' is not assignable to type 'number'.
+edad = "veinticinco"; // Error: string no es number
+```
 
-Nota: Los dos puntos : number indican que esa variable SOLO puede guardar números.
-B. Interfaces (Definiendo la forma de los objetos)
-En bases de datos y APIs, sabemos exactamente qué campos tendrá un usuario. TypeScript nos permite definir ese "molde":
+### Interfaces
 
-typescript
-// Definimos cómo debe ser un usuario
+Una interfaz define la forma esperada de un objeto:
+
+```ts
 interface Usuario {
-    id: number;
-    username: string;
-    email: string;
-    isActive: boolean;
-    createdAt?: Date; // El '?' significa que este campo es opcional
+  id: string;
+  username: string;
+  email: string | null;
+  role: 'user' | 'admin';
 }
+```
 
-// Uso correcto
-const user1: Usuario = {
-    id: 1,
-    username: "Pablo",
-    email: "pablo@example.com",
-    isActive: true
-};
+Si falta un campo obligatorio o se usa un tipo incorrecto, TypeScript avisa al compilar.
 
-// Uso incorrecto (Falta email)
-const user2: Usuario = {
-    id: 2,
-    username: "Ana",
-    isActive: false
-};
-// ERROR: Property 'email' is missing in type...
+### Tipos literales
 
+El proyecto usa tipos estrictos para limitar valores posibles:
 
+```ts
+type UserRole = 'user' | 'admin';
+type UserStatus = 'active' | 'disabled';
+```
 
-C. Tipos Union y Literales
-Podemos ser muy específicos sobre qué valores son aceptados:
+Esto evita estados ambiguos dentro del backend.
 
-typescript
-// Solo puede ser 'GET', 'POST', 'PUT' o 'DELETE'
-type MetodoHTTP = 'GET' | 'POST' | 'PUT' | 'DELETE';
+---
 
-function enviarRequest(metodo: MetodoHTTP) {
-    // ... lógica
-}
+## 4. Arquitectura actual
 
-enviarRequest('PATCH'); // ERROR: 'PATCH' no está en la lista permitida.
+El proyecto es un **monolito modular**: una sola aplicación Fastify dividida por dominios.
 
+```text
+src/
+├── app.ts
+├── server.ts
+├── config/
+├── db/
+│   ├── prisma.ts
+│   └── prismaMappers.ts
+├── modules/
+│   ├── users/
+│   ├── auth/
+│   ├── sessions/
+│   ├── two_factor/
+│   ├── oauth/
+│   └── authorization/
+├── shared/
+└── ui/
 
-D. Generics (Cajas reutilizables)
-Permiten crear funciones que trabajan con cualquier tipo de dato, pero manteniendo la seguridad. Es como decir "esta caja guarda lo que tú quieras, pero una vez metes un zapato, solo podrás sacar zapatos".
-typescript
-// T es el tipo que decidiremos luego
-function identidad<T>(valor: T): T {
-    return valor;
-}
+prisma/
+├── schema.prisma
+└── migrations/
+```
 
-const numero = identidad<number>(10); // Devuelve number
-const texto = identidad<string>("Hola"); // Devuelve string
+### Flujo general de una petición
 
+1. El cliente envía una petición HTTP a Fastify.
+2. La ruta valida los datos con Zod cuando corresponde.
+3. El servicio de dominio ejecuta la lógica de negocio.
+4. El repositorio lee o escribe datos usando Prisma.
+5. Fastify responde con JSON y código HTTP adecuado.
 
-¿Cómo se ejecuta TypeScript?
-Los navegadores y Node.js no entienden TypeScript nativamente. Necesitamos un paso intermedio llamado Compilación.
-Escribes código en archivos .ts.
-Ejecutas el compilador (tsc o npm run build).
-El compilador genera archivos .js limpios en la carpeta dist/.
-Node.js ejecuta esos archivos .js.
-3. Arquitectura del Sistema
-El proyecto sigue una arquitectura modular separada por responsabilidades.
+---
 
-Estructura de Directorios
-trascendence/
-├── src/                  # Código fuente original (TypeScript)
-│   ├── app.ts            # Configuración principal de la aplicación (Fastify)
-│   ├── server.ts         # Punto de entrada (inicia el servidor)
-│   ├── routes/           # Definición de endpoints API
-│   │   ├── auth.ts       # Login, registro, cambio de contraseña
-│   │   ├── users.ts      # Gestión de perfiles
-│   │   └── game.ts       # Lógica de partidas
-│   ├── db/               # Conexión y migraciones de Base de Datos
-│   │   ├── index.ts      # Configuración de Kysely (DB Pool)
-│   │   └── migrate.ts    # Script para actualizar tablas
-│   ├── types/            # Definiciones de tipos TypeScript globales
-│   └── utils/            # Funciones helper (validadores, hashing)
-├── dist/                 # Código compilado (JavaScript) - NO EDITAR
-├── tests/                # Tests de integración
-├── .env                  # Variables de entorno (Secretos, DB URL)
-├── package.json          # Dependencias y scripts
-└── tsconfig.json         # Configuración del compilador TypeScript
+## 5. Módulos principales
 
-Flujo de una Petición (Request Lifecycle)
-Cliente (Frontend): Envía una petición HTTP (ej: POST /auth/login).
-Servidor (Fastify):
-Recibe la petición.
-Ejecuta Hooks/Middlewares: Verifica cookies, valida headers, comprueba CORS.
-Ruta la petición al controlador correspondiente (src/routes/auth.ts).
-Controlador:
-Valida los datos de entrada (ej: ¿el email tiene formato correcto?).
-Llama a la lógica de negocio o base de datos.
-Base de Datos (PostgreSQL):
-Ejecuta la consulta SQL segura generada por Kysely.
-Devuelve los datos crudos.
-Respuesta:
-El controlador procesa los datos.
-Fastify envía la respuesta JSON al cliente con el código de estado adecuado (200 OK, 401 Error, etc.).
+### `users`
 
+Gestiona identidad y perfil mínimo:
 
+- `id`
+- `username`
+- `email`
+- `displayName`
+- `role`
+- `status`
 
-4. Módulos Principales y Funcionalidad
-A. Autenticación (src/routes/auth.ts)
-Es el corazón de la seguridad. Maneja:
-Registro: Hash de contraseña, creación de usuario en DB, generación de tokens 2FA (si aplica).
-Login: Verificación de credenciales, inicio de sesión seguro.
-Reautenticación: Requerida para acciones sensibles (cambiar email/password). Valida la contraseña actual nuevamente.
-Logout: Invalidación de la sesión.
-Seguridad Clave:
-Las contraseñas nunca se guardan en texto plano. Se usa un algoritmo de hash (como Argon2) que convierte miPassword123 en una cadena irreconocible $argon2id$....
-Las sesiones se gestionan con cookies HttpOnly (inaccesibles para JavaScript del navegador, previniendo robo de sesión XSS).
-B. Base de Datos (src/db/)
-Usamos Kysely, un constructor de consultas SQL. A diferencia de otros ORMs (como TypeORM), Kysely no oculta SQL, sino que lo hace más seguro y con autocompletado.
-Migraciones: Archivos que definen cómo cambian las tablas con el tiempo. Al iniciar, migrate.ts verifica si la DB está al día.
-Type-Safety: Si intentas hacer db.selectFrom('users').select('campo_inexistente'), TypeScript te dará error antes de compilar.
-C. Gestión de Errores
-El sistema utiliza códigos de estado HTTP estándar:
-200: Éxito.
-201: Creado (registro exitoso).
-400: Bad Request (datos mal formados, contraseña débil).
-401: Unauthorized (no logueado o sesión expirada).
-403: Forbidden (logueado pero sin permisos).
-409: Conflict (usuario o email ya existe).
-500: Internal Server Error (fallo en el servidor o DB).
-5. Diagramas de Flujo de Datos
-Diagrama 1: Flujo de Registro de Usuario
-mermaid
+No guarda contraseñas ni sesiones.
+
+### `auth`
+
+Gestiona:
+
+- registro,
+- login,
+- challenges de login con 2FA,
+- reautenticación,
+- cambio de contraseña.
+
+Las contraseñas se guardan hasheadas con `scrypt`, nunca en texto plano.
+
+### `sessions`
+
+Gestiona sesiones opacas de servidor:
+
+- crea sesiones,
+- busca sesiones por hash de token,
+- revoca sesiones,
+- marca sesiones como reautenticadas.
+
+El navegador solo recibe una cookie. La base de datos guarda un hash del token, no el token en claro.
+
+### `two_factor`
+
+Gestiona:
+
+- setup TOTP,
+- confirmación TOTP,
+- recovery codes,
+- uso único de recovery codes,
+- desactivación de 2FA.
+
+Los secretos TOTP se cifran antes de guardarse.
+
+### `oauth`
+
+Gestiona OAuth 42:
+
+- inicio de login OAuth,
+- validación de `state`,
+- callback,
+- creación o resolución de usuario local,
+- linking explícito de cuenta 42,
+- unlink seguro.
+
+El login y el linking usan estados separados para evitar mezclar flujos.
+
+### `authorization`
+
+Contiene helpers como:
+
+- `requireAuth`,
+- `requireRole`,
+- obtención del usuario actual.
+
+---
+
+## 6. Base de datos con Prisma + SQLite
+
+La base de datos está definida en:
+
+```text
+prisma/schema.prisma
+```
+
+Modelos actuales:
+
+- `User`
+- `PasswordCredential`
+- `Session`
+- `LoginChallenge`
+- `TwoFactorTotp`
+- `RecoveryCode`
+- `OAuthAccount`
+- `OAuthState`
+
+SQLite se configura con:
+
+```env
+DATABASE_URL="file:./dev.db"
+```
+
+Los cambios de esquema se hacen modificando `prisma/schema.prisma` y creando migraciones Prisma.
+
+Comandos útiles:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+npx prisma studio
+```
+
+Los archivos `.db` generados localmente no deben subirse al repositorio.
+
+---
+
+## 7. Diagramas de flujo
+
+### Registro de usuario
+
+```mermaid
 graph TD
-    A[Cliente: Formulario Registro] -->|POST /auth/register| B(Fastify Server)
-    B --> C{Validar Datos?}
-    C -->|No (Email inválido)| D[Responder 400 Bad Request]
-    C -->|Sí| E[Hash Contraseña (Argon2)]
-    E --> F[Insertar en DB PostgreSQL]
-    F -->|Error (Usuario existe)| G[Responder 409 Conflict]
-    F -->|Éxito| H[Crear Sesión / Cookie]
-    H --> I[Responder 201 Created + User Data]
+    A[Cliente: POST /auth/register] --> B[Fastify route]
+    B --> C{Validar body}
+    C -->|Inválido| D[400 Bad Request]
+    C -->|Válido| E[AuthService]
+    E --> F[Hash password con scrypt]
+    F --> G[PrismaUsersRepository crea User]
+    G --> H[PrismaAuthRepository crea PasswordCredential]
+    H --> I[SessionsService crea sesión]
+    I --> J[Set-Cookie HTTP-only]
+    J --> K[200 OK]
+```
 
+### Login con 2FA opcional
 
-
-Diagrama 2: Flujo de Cambio de Contraseña (Seguro)
-Este es el flujo crítico que requiere reautenticación.
-
-mermaid
+```mermaid
 sequenceDiagram
     participant U as Usuario
-    participant F as Fastify API
-    participant DB as PostgreSQL
+    participant API as Fastify API
+    participant Auth as AuthService
+    participant DB as Prisma/SQLite
 
-    Note over U, DB: Paso 1: Reautenticación
-    U->>F: POST /auth/reauthenticate { password: "actual" }
-    F->>DB: Verificar credenciales
-    DB-->>F: Usuario válido
-    F->>F: Marcar sesión como "Reautenticada" (Temporal)
-    F-->>U: 200 OK (Token temporal o Cookie especial)
-
-    Note over U, DB: Paso 2: Cambio de Contraseña (< 10 min)
-    U->>F: POST /auth/password/change { new_password: "nueva_segura" }
-    F->>F: Verificar estado "Reautenticado"
-    alt No reautenticado recientemente
-        F-->>U: 401 Unauthorized
-    else Reautenticado OK
-        F->>F: Validar fortaleza nueva contraseña
-        alt Contraseña débil
-            F-->>U: 400 Bad Request
-        else Contraseña fuerte
-            F->>F: Hash Nueva Contraseña
-            F->>DB: UPDATE users SET password = ...
-            DB-->>F: OK
-            F->>F: Invalidar otras sesiones (Opcional)
-            F-->>U: 200 OK Password Changed
-        end
+    U->>API: POST /auth/login
+    API->>Auth: validar credenciales
+    Auth->>DB: buscar usuario y password credential
+    DB-->>Auth: datos de auth
+    Auth->>Auth: verificar password
+    alt Usuario sin 2FA
+        Auth->>DB: crear sesión
+        API-->>U: 200 OK + cookie
+    else Usuario con 2FA
+        Auth->>DB: crear login challenge
+        API-->>U: requires_2fa
     end
+```
 
+### Cambio de contraseña con reautenticación
 
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant API as Fastify API
+    participant DB as Prisma/SQLite
 
+    U->>API: POST /auth/reauthenticate
+    API->>DB: verificar credenciales
+    DB-->>API: usuario válido
+    API->>DB: marcar sesión como reautenticada
+    API-->>U: 200 OK
 
-Code
-Preview
+    U->>API: POST /auth/password/change
+    API->>API: comprobar reautenticación reciente
+    alt No reautenticado
+        API-->>U: 401 Unauthorized
+    else Reautenticado
+        API->>DB: actualizar password credential
+        API->>DB: revocar otras sesiones
+        API-->>U: 200 OK
+    end
+```
 
-Diagrama 3: Arquitectura Interna de Datos
-+----------------+       +---------------------+       +------------------+
-|   Frontend     |       |   Backend (Node)    |       |   Database       |
-|   (React/Vue)  |       |   (Fastify + TS)    |       |   (PostgreSQL)   |
-+----------------+       +---------------------+       +------------------+
-       |                           |                            |
-       | 1. HTTPS Request          |                            |
-       | (JSON Body + Cookies)     |                            |
-       +-------------------------->|                            |
-                                   | 2. Parse & Validate        |
-                                   | (Zod / Schema)             |
-                                   |                            |
-                                   | 3. Business Logic          |
-                                   | (Auth Check, Rules)        |
-                                   |                            |
-                                   | 4. SQL Query (Kysely)      |
-                                   +--------------------------->|
-                                                                | 5. Execute
-                                                                | 6. Return Rows
-                                   | 7. Map to TS Objects       |<---------------------------+
-                                   |                            |
-       | 8. JSON Response          |                            |
-       | (Data + Status Code)      |                            |
-       |<--------------------------+                            |
+---
 
+## 8. Endpoints principales
 
-6. Guía de Uso y Comandos
-Prerrequisitos
-Node.js v18+ instalado.
-PostgreSQL instalado y corriendo.
-Archivo .env configurado (ver .env.example).
+- `GET /`
+- `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/login/2fa`
+- `POST /auth/logout`
+- `POST /auth/reauthenticate`
+- `POST /auth/password/change`
+- `GET /auth/oauth/42`
+- `GET /auth/oauth/42/callback`
+- `POST /auth/oauth/42/link/start`
+- `GET /auth/oauth/42/link/callback`
+- `DELETE /auth/oauth/42/link`
+- `POST /2fa/setup`
+- `POST /2fa/confirm`
+- `POST /2fa/recovery-codes/regenerate`
+- `DELETE /2fa`
+- `GET /me`
+- `GET /admin/users`
 
+---
 
+## 9. Instalación y ejecución
 
+Instalar dependencias:
 
-
-
-Instalación
-bash
+```bash
 npm install
+```
 
-Desarrollo
-Para compilar automáticamente los cambios en TypeScript:
-bash
+Crear `.env` desde `.env.example`.
+
+Generar clave TOTP:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Preparar Prisma:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+```
+
+Compilar:
+
+```bash
 npm run build
+```
 
-(Esto abre tsc en modo watch. En otra terminal, ejecuta el servidor).
+Arrancar:
 
-Construcción (Build)
-Genera los archivos JS en dist/:
-bash
-npm run build
-
-
-Iniciar Servidor
-Ejecuta la versión compilada:
-
-bash
+```bash
 npm start
+```
 
+Ejecutar tests:
 
-Base de Datos
-Las migraciones se ejecutan automáticamente al iniciar (npm start). Si necesitas forzarlas manualmente o crear una nueva:
-Editar archivos en src/db/migrations/.
-El sistema usa transacciones para asegurar que si una migración falla, la DB no quede a medias.
-7. Seguridad Implementada
-SQL Injection: Prevenida totalmente gracias a Kysely, que escapa parámetros automáticamente. Nunca se concatenan strings en las queries.
-XSS (Cross-Site Scripting): Las cookies de sesión tienen el flag HttpOnly, impidiendo que scripts maliciosos en el navegador las lean.
-CSRF (Cross-Site Request Forgery): Se valida el origen de las peticiones y se usan cookies SameSite=Strict o Lax.
-Contraseñas: Hashing lento y con sal (salt) usando Argon2id, el estándar actual de la industria.
-Rate Limiting: (Si está implementado) Limita el número de intentos de login para evitar ataques de fuerza bruta.
-8. Apéndice: Ejemplos de Código Útiles
+```bash
+npm test
+```
 
+Los tests usan repositorios en memoria con `NODE_ENV=test`, así que no necesitan SQLite real.
 
-Cómo conectar a la DB (src/db/index.ts)
-typescript
-import { Kysely, PostgresDialect } from 'kysely';
-import { Pool } from 'pg';
-import { Database } from '../types/database';
+---
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+## 10. Seguridad implementada
 
-export const db = new Kysely<Database>({
-  dialect: new PostgresDialect({ pool }),
-});
+- Cookies HTTP-only para sesiones.
+- Tokens de sesión opacos.
+- Hash del token en base de datos, no token en claro.
+- Hash de contraseñas con `scrypt`.
+- Secretos TOTP cifrados.
+- Recovery codes hasheados y de un solo uso.
+- Separación explícita entre login OAuth y linking OAuth.
+- Reautenticación para acciones sensibles.
+- Revocación de otras sesiones tras cambios sensibles.
 
+---
 
-Ejemplo de Ruta Segura (src/routes/profile.ts)
-typescript
+## 11. Próximos pasos naturales
 
-app.get('/profile', async (req, reply) => {
-  // req.user es inyectado por el middleware de autenticación
-  if (!req.user) {
-    return reply.status(401).send({ error: 'No autorizado' });
-  }
+Después de esta base, lo más útil es añadir sobre Prisma:
 
-  const user = await db.selectFrom('users')
-    .where('id', '=', req.user.id)
-    .select(['username', 'email', 'avatar_url'])
-    .executeTakeFirst();
+1. modelos de partidas,
+2. estadísticas de usuario,
+3. torneos,
+4. amistades/bloqueos,
+5. chat,
+6. autenticación de WebSocket leyendo la sesión/cookie existente.
 
-  return reply.send(user);
-});
+No conviene rehacer auth con JWT salvo que aparezca una razón concreta. Para este proyecto, las sesiones actuales ya encajan bien.
 
+---
 
-
-Documentación generada para el proyecto Transcendence Backend. Última actualización: 2026.
-### Pasos para guardar el archivo en Windows:
-
-1.  Abre el **Bloc de notas** (Notepad) o un editor de código como VS Code.
-2.  Copia **todo** el texto que está dentro del bloque de código de arriba (desde `# Documentación...` hasta el final).
-3.  Pégalo en tu editor.
-4.  Ve a **Archivo > Guardar como**.
-5.  Navega a `C:\Proyectos\trascendence` (crea la carpeta si no existe).
-6.  En "Nombre de archivo", escribe: `DOCUMENTACION_COMPLETA.md`.
-7.  **Importante:** En "Tipo", selecciona **"Todos los archivos (*.*)"** (no lo dejes como documento de texto).
-8.  Guarda.
-
-Ahora tendrás el archivo listo para leer en cualquier visor Markdown o subirlo a GitHub.
+Última actualización: 2026-06-15.
