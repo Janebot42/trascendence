@@ -15,7 +15,7 @@ const envSchema = z.object({
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   TOTP_ISSUER: z.string().default('Transcendence'),
   TOTP_ENCRYPTION_KEY_BASE64: z.string().min(1),
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: z.string().min(1).optional(),
   OAUTH_42_CLIENT_ID: z.string().min(1).optional(),
   OAUTH_42_CLIENT_SECRET: z.string().min(1).optional(),
   OAUTH_42_REDIRECT_URI: z.string().url().optional(),

@@ -3,22 +3,21 @@ import Fastify from 'fastify';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { securityConfig } from './config/security.js';
-import { createPgPool } from './db/client.js';
-import { runMigrations } from './db/migrate.js';
+import { createPrismaClient } from './db/prisma.js';
 import { AppError } from './shared/errors/AppError.js';
 import { SecretBox } from './shared/crypto/encryption.js';
 import { ScryptPasswordHasher } from './shared/crypto/passwordHasher.js';
 import { InMemoryUsersRepository } from './modules/users/users.repository.js';
-import { PgUsersRepository } from './modules/users/users.pgRepository.js';
+import { PrismaUsersRepository } from './modules/users/users.prismaRepository.js';
 import { UsersService } from './modules/users/users.service.js';
 import { InMemorySessionsRepository } from './modules/sessions/sessions.repository.js';
-import { PgSessionsRepository } from './modules/sessions/sessions.pgRepository.js';
+import { PrismaSessionsRepository } from './modules/sessions/sessions.prismaRepository.js';
 import { SessionsService } from './modules/sessions/sessions.service.js';
 import { InMemoryAuthRepository } from './modules/auth/auth.repository.js';
-import { PgAuthRepository } from './modules/auth/auth.pgRepository.js';
+import { PrismaAuthRepository } from './modules/auth/auth.prismaRepository.js';
 import { AuthService } from './modules/auth/auth.service.js';
 import { InMemoryTwoFactorRepository } from './modules/two_factor/twoFactor.repository.js';
-import { PgTwoFactorRepository } from './modules/two_factor/twoFactor.pgRepository.js';
+import { PrismaTwoFactorRepository } from './modules/two_factor/twoFactor.prismaRepository.js';
 import { TotpService } from './modules/two_factor/totp.service.js';
 import { RecoveryCodesService } from './modules/two_factor/recoveryCodes.service.js';
 import { TwoFactorService } from './modules/two_factor/twoFactor.service.js';
@@ -27,7 +26,7 @@ import { registerTwoFactorRoutes } from './modules/two_factor/twoFactor.routes.j
 import { registerUserRoutes } from './modules/users/users.routes.js';
 import { registerUiRoutes } from './ui/ui.routes.js';
 import { InMemoryOAuthRepository } from './modules/oauth/oauth.repository.js';
-import { PgOAuthRepository } from './modules/oauth/oauth.pgRepository.js';
+import { PrismaOAuthRepository } from './modules/oauth/oauth.prismaRepository.js';
 import { OAuthService } from './modules/oauth/oauth.service.js';
 import { registerOAuthRoutes } from './modules/oauth/oauth.routes.js';
 
@@ -50,20 +49,19 @@ export async function buildApp() {
 
   await app.register(cookie);
 
-  const pgPool = createPgPool();
-  if (pgPool) {
-    await runMigrations(pgPool);
+  const prisma = createPrismaClient();
+  if (prisma) {
     app.addHook('onClose', async () => {
-      await pgPool.end();
+      await prisma.$disconnect();
     });
   }
 
-  const usersRepository = pgPool ? new PgUsersRepository(pgPool) : new InMemoryUsersRepository();
+  const usersRepository = prisma ? new PrismaUsersRepository(prisma) : new InMemoryUsersRepository();
   const usersService = new UsersService(usersRepository);
-  const sessionsRepository = pgPool ? new PgSessionsRepository(pgPool) : new InMemorySessionsRepository();
-  const authRepository = pgPool ? new PgAuthRepository(pgPool) : new InMemoryAuthRepository();
-  const twoFactorRepository = pgPool ? new PgTwoFactorRepository(pgPool) : new InMemoryTwoFactorRepository();
-  const oauthRepository = pgPool ? new PgOAuthRepository(pgPool) : new InMemoryOAuthRepository();
+  const sessionsRepository = prisma ? new PrismaSessionsRepository(prisma) : new InMemorySessionsRepository();
+  const authRepository = prisma ? new PrismaAuthRepository(prisma) : new InMemoryAuthRepository();
+  const twoFactorRepository = prisma ? new PrismaTwoFactorRepository(prisma) : new InMemoryTwoFactorRepository();
+  const oauthRepository = prisma ? new PrismaOAuthRepository(prisma) : new InMemoryOAuthRepository();
   const sessionsService = new SessionsService(sessionsRepository, usersService);
   const totpService = new TotpService(new SecretBox(securityConfig.totpEncryptionKeyBase64));
   const recoveryCodesService = new RecoveryCodesService(twoFactorRepository);

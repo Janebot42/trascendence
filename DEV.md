@@ -10,14 +10,14 @@ The project intentionally avoids JWT as the main auth mechanism, microservices, 
 
 - Node.js + TypeScript.
 - Fastify for HTTP.
-- PostgreSQL for persistence.
-- `pg` for database access.
+- Prisma ORM for persistence.
+- SQLite as the default local database.
 - `zod` for request validation.
 - Node `scrypt` for password hashing.
 - `otplib` for TOTP.
 - Server-side sessions with secure cookies.
 
-The project can also run in memory when `DATABASE_URL` is not configured or when `NODE_ENV=test`. This keeps tests fast and makes local experimentation easy.
+The project uses in-memory repositories when `NODE_ENV=test`. This keeps tests fast and isolated.
 
 ## Module Boundaries
 
@@ -35,184 +35,40 @@ src/modules/
 
 ### `users`
 
-Owns user identity and profile-like data:
-
-- username
-- email
-- display name
-- role
-- status
-
-It does not own passwords, sessions or 2FA.
+Owns user identity and profile-like data: username, email, display name, role and status.
 
 ### `auth`
 
-Owns authentication use cases:
-
-- register
-- login
-- login challenge for 2FA
-- complete 2FA login
-- reauthentication
-- change password
-
-It orchestrates `users`, `sessions` and `two_factor`, but does not directly implement TOTP internals or session cookie details.
+Owns registration, login, 2FA login challenges, reauthentication and password changes. It orchestrates `users`, `sessions` and `two_factor`.
 
 ### `sessions`
 
-Owns server-side sessions:
-
-- create session
-- read session from opaque token
-- revoke session
-- revoke other sessions
-- mark session as recently reauthenticated
-
-The browser receives only an opaque cookie. The database stores only a hash of that token.
+Owns server-side sessions. The browser receives only an opaque cookie. The database stores only a hash of that token.
 
 ### `two_factor`
 
-Owns TOTP and recovery codes:
-
-- generate TOTP secret
-- encrypt TOTP secret
-- generate provisioning URI
-- verify TOTP code
-- generate recovery codes
-- hash recovery codes
-- consume recovery code once
-- disable 2FA
+Owns TOTP setup, TOTP verification and recovery codes.
 
 ### `oauth`
 
-Owns OAuth 42 integration:
+Owns OAuth 42 login plus explicit link/unlink flows. Login and linking use separate state purposes.
 
-- start authorization redirect
-- generate and validate `state`
-- exchange authorization code for access token
-- fetch 42 profile
-- resolve or create the local user
-- hand off to local session / 2FA flow
+## Persistence
 
-OAuth is treated as another first-factor entry point. It does not replace local session management.
+Persistence uses Prisma ORM with SQLite.
 
-The module also owns explicit account linking and unlinking for provider 42. That flow is separate from login: it requires an already authenticated local session plus recent strong reauthentication.
-
-### `authorization`
-
-Owns request guards:
-
-- `requireAuth`
-- `requireRole`
-- `currentUser` request decoration
-
-Current roles are intentionally simple:
+Main files:
 
 ```text
-user
-admin
+prisma/schema.prisma
+src/db/prisma.ts
+src/db/prismaMappers.ts
+src/modules/*/*.prismaRepository.ts
 ```
 
-## Request Flow
+Manual SQL should not be added to application code. Schema changes should go through `prisma/schema.prisma` and Prisma migrations.
 
-### Register
-
-1. Validate username, email and password.
-2. Create user.
-3. Hash password.
-4. Store password credential separately from user.
-5. Create final session.
-6. Send session cookie.
-
-### Login without 2FA
-
-1. Validate username and password.
-2. Check user is active.
-3. Verify password hash.
-4. If 2FA is disabled, create final session.
-5. Send session cookie.
-
-### Login with OAuth 42
-
-1. User hits `/auth/oauth/42`.
-2. Backend creates an OAuth `state` record with `purpose=login` and redirects to 42.
-3. Callback validates `state`, validates the temporary browser cookie and consumes the state.
-4. Backend exchanges `code` for an access token.
-5. Backend fetches the 42 profile.
-6. Backend resolves an existing linked account or creates a new local user. It does not auto-link by email to an existing password account.
-7. If local 2FA is disabled, create the final session.
-8. If local 2FA is enabled, create a local `login_challenge` and require TOTP.
-
-### Account link with OAuth 42
-
-1. User must already be authenticated locally.
-2. User must recently reauthenticate for a sensitive action.
-3. Backend starts OAuth with `purpose=link` and stores `initiating_user_id` in `oauth_states`.
-4. Link callback validates cookie + state + purpose + initiating user.
-5. If the 42 identity is unlinked, backend creates the `oauth_accounts` row.
-6. If the 42 identity already belongs to the same user, the operation is idempotent.
-7. If the 42 identity belongs to another user, backend fails with `OAUTH_ALREADY_LINKED_TO_OTHER_USER`.
-8. Linking never creates a new login session.
-
-### Account unlink with OAuth 42
-
-1. User must already be authenticated locally.
-2. User must recently reauthenticate for a sensitive action.
-3. Backend finds the linked `oauth_accounts` row for provider 42.
-4. Backend checks whether removing it would leave the account without a viable access method.
-5. If no password credential and no other OAuth method would remain, unlink fails with `OAUTH_UNLINK_FORBIDDEN`.
-6. Otherwise the link is deleted.
-
-This keeps OAuth as identity proof and local sessions as the actual app authentication state.
-
-### Login with 2FA
-
-1. Validate username and password.
-2. Detect that 2FA is enabled.
-3. Create a short-lived `login_challenge`.
-4. Return `requires_2fa`.
-5. Do not create a session yet.
-6. User submits TOTP or recovery code.
-7. Verify second factor.
-8. Consume challenge.
-9. Create final session.
-10. Send session cookie.
-
-This is a hard security invariant: no final session exists before 2FA is complete.
-
-### Activate 2FA
-
-1. User must be authenticated.
-2. User must recently reauthenticate.
-3. Backend generates a TOTP secret.
-4. Secret is encrypted before storage.
-5. Backend returns provisioning URI and manual secret.
-6. User enters the secret in an authenticator app.
-7. User confirms with a TOTP code.
-8. Backend enables TOTP.
-9. Backend generates recovery codes.
-10. Recovery codes are shown once and stored hashed.
-
-### Disable 2FA
-
-1. User must be authenticated.
-2. User must strongly reauthenticate.
-3. If 2FA is enabled, strong reauth means password plus TOTP or recovery code.
-4. Backend deletes the TOTP method.
-5. Backend invalidates old recovery codes.
-6. Backend revokes other sessions.
-
-The current session is kept. Other sessions are revoked because disabling 2FA reduces account security.
-
-## Data Model
-
-The base migration is:
-
-```text
-db/migrations/001_auth_base.sql
-```
-
-Main tables:
+The current Prisma schema covers:
 
 ```text
 users
@@ -223,13 +79,9 @@ two_factor_totp
 recovery_codes
 oauth_states
 oauth_accounts
-
-`oauth_states` now carries both the provider and the purpose of the flow (`login` or `link`), plus an optional `initiating_user_id` for linking.
 ```
 
-The migration is idempotent and runs on startup when PostgreSQL is enabled.
-
-This split matters: login and linking must not share a callback meaning just because they both happen to pass through the same provider.
+Future game, match, tournament, friend/block and chat models should be added to Prisma instead of handwritten SQL.
 
 ## Environment
 
@@ -238,7 +90,14 @@ Create `.env` from `.env.example`.
 Required:
 
 ```env
+DATABASE_URL="file:./dev.db"
 TOTP_ENCRYPTION_KEY_BASE64=...
+```
+
+Generate the TOTP key with:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 For OAuth 42:
@@ -252,20 +111,6 @@ OAUTH_42_TOKEN_URL=https://api.intra.42.fr/oauth/token
 OAUTH_42_ME_URL=https://api.intra.42.fr/v2/me
 ```
 
-Generate it with:
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-Optional PostgreSQL:
-
-```env
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/transcendence
-```
-
-When `DATABASE_URL` is missing, repositories run in memory.
-
 ## Running Locally
 
 Install dependencies:
@@ -274,10 +119,11 @@ Install dependencies:
 npm install
 ```
 
-Start PostgreSQL:
+Generate Prisma Client and apply migrations:
 
 ```powershell
-docker compose up -d postgres
+npx prisma generate
+npx prisma migrate dev
 ```
 
 Compile:
@@ -313,7 +159,7 @@ node .\node_modules\typescript\bin\tsc -p tsconfig.json
 node --test tests\integration\*.test.mjs
 ```
 
-The tests run with `NODE_ENV=test`, so they use in-memory repositories and do not require PostgreSQL.
+The tests run with `NODE_ENV=test`, so they use in-memory repositories and do not require a SQLite file.
 
 Current integration coverage includes:
 
@@ -328,128 +174,25 @@ Current integration coverage includes:
 - TOTP login
 - recovery code login
 - recovery code one-use behavior
-- password change with reauthentication
-- revocation of other sessions
-- disabling 2FA with strong reauthentication
-- static manual UI routes
+- OAuth 42 login state validation
+- OAuth 42 account creation
+- OAuth 42 explicit link/unlink behavior
 
-## Manual Test UI
+## Prisma Inspection
 
-The manual UI lives in:
-
-```text
-public/
-src/ui/
-```
-
-It is intentionally framework-free. It calls the same backend endpoints as a real frontend would and uses browser cookies.
-
-Use it to test:
-
-- create account
-- login
-- logout
-- refresh `/me`
-- reauthenticate
-- activate 2FA
-- confirm TOTP with Google Authenticator
-- login with TOTP
-- login with recovery code
-- disable 2FA
-- change password
-
-The UI is a testing aid, not a production frontend.
-
-## Security Decisions
-
-### Sessions
-
-Sessions are server-side. The cookie contains an opaque token.
-
-Cookie settings:
-
-```text
-HttpOnly
-Secure in production
-SameSite=Lax
-Path=/
-```
-
-The database stores only `sha256(token)`, not the raw token.
-
-### Passwords
-
-Passwords are hashed with Node `scrypt`.
-
-Argon2id would also be a good choice, but it requires native build support. `scrypt` avoids that friction while remaining a strong password hashing option for this project stage.
-
-### TOTP Secrets
-
-TOTP secrets are encrypted at rest with AES-256-GCM. The encryption key comes from:
-
-```env
-TOTP_ENCRYPTION_KEY_BASE64
-```
-
-Never commit `.env`.
-
-### Recovery Codes
-
-Recovery codes are:
-
-- generated only after TOTP confirmation
-- shown once
-- stored hashed
-- consumed immediately on use
-- invalidated when 2FA is disabled or regenerated
-
-### Reauthentication
-
-Sensitive actions require recent reauthentication.
-
-Current window:
-
-```text
-10 minutes
-```
-
-If 2FA is enabled, reauthentication requires:
-
-```text
-password + TOTP
-```
-
-or:
-
-```text
-password + recovery code
-```
-
-## PostgreSQL Queries
-
-List users:
+Open Prisma Studio:
 
 ```powershell
-docker compose exec postgres psql -U postgres -d transcendence -c "select id, username, email, role, status, created_at from users order by created_at desc;"
+npx prisma studio
 ```
 
-List sessions:
+Reset local development database if needed:
 
 ```powershell
-docker compose exec postgres psql -U postgres -d transcendence -c "select id, user_id, created_at, expires_at, revoked_at from sessions order by created_at desc;"
+npx prisma migrate reset
 ```
 
-List TOTP records:
-
-```powershell
-docker compose exec postgres psql -U postgres -d transcendence -c "select user_id, enabled_at, confirmed_at, created_at from two_factor_totp order by created_at desc;"
-```
-
-List recovery code status:
-
-```powershell
-docker compose exec postgres psql -U postgres -d transcendence -c "select user_id, used_at, replaced_at, created_at from recovery_codes order by created_at desc;"
-```
+Do not commit generated SQLite database files.
 
 ## Adding New Features
 
@@ -460,6 +203,7 @@ Follow these rules:
 - Keep cookie and session lifecycle in `sessions`.
 - Keep TOTP/recovery internals in `two_factor`.
 - Keep route access rules in `authorization`.
+- Add persistent models through Prisma.
 
 Do not put password hashes in `users`.
 Do not create sessions before 2FA is complete.
@@ -473,14 +217,13 @@ Do not add JWT unless there is a concrete reason.
 - No password reset flow.
 - No account lockout policy beyond simple in-memory rate limiting.
 - No CSRF token layer yet.
-- No production migration runner with migration history table.
 - No admin UI.
+- No game/match/tournament/chat models yet.
 
 These are acceptable for the current base. The next most useful backend improvements would be:
 
-1. Add a real migration runner.
-2. Add CSRF protection if the frontend is cookie-based and browser-facing.
-3. Add password reset.
-4. Add email verification.
-5. Improve rate limiting with Redis or PostgreSQL-backed counters.
-
+1. Add match/game models in Prisma.
+2. Add WebSocket authentication using the existing session cookie.
+3. Add CSRF protection if the frontend is cookie-based and browser-facing.
+4. Add password reset.
+5. Add email verification.

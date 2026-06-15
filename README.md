@@ -6,8 +6,10 @@ Backend unico modular para usuarios, autenticacion, sesiones, login OAuth 42, 2F
 
 - Fastify para HTTP con poca magia y buen soporte de hooks.
 - TypeScript estricto para contratos claros entre modulos.
+- Prisma ORM para persistencia tipada.
+- SQLite como base de datos local por defecto.
 - Cookies con sesiones de servidor; no JWT como mecanismo principal.
-- `scrypt` de Node para passwords. Es un hash fuerte y evita dependencias nativas en Windows.
+- `scrypt` de Node para passwords.
 - TOTP con secretos cifrados y recovery codes hasheados.
 
 ## Modulos
@@ -35,30 +37,31 @@ npm install
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-4. Ejecutar:
+4. Preparar Prisma/SQLite:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+```
+
+5. Ejecutar:
 
 ```bash
 npm run build
 npm start
 ```
 
-## PostgreSQL local
+## Base de datos
 
-El backend usa repositorios en memoria si `DATABASE_URL` no esta definida o si `NODE_ENV=test`.
-Para persistencia real, levanta PostgreSQL:
+El backend usa **Prisma ORM con SQLite**.
 
-```bash
-docker compose up -d postgres
-```
-
-Configura `.env`:
+Variable recomendada en `.env`:
 
 ```env
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/transcendence
+DATABASE_URL="file:./dev.db"
 ```
 
-Al arrancar, el backend ejecuta la migracion base idempotente de `db/migrations/001_auth_base.sql`.
-
+Con `NODE_ENV=test`, la app usa repositorios en memoria para que los tests sean rapidos y aislados.
 
 ## OAuth 42
 
@@ -90,7 +93,7 @@ Flujo de linking/unlinking:
 
 ## Estado actual
 
-La app mantiene repositorios en memoria para tests y desarrollo sin base de datos. Con `DATABASE_URL`, usa PostgreSQL para usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery codes, estados OAuth y cuentas OAuth enlazadas.
+La app ya cubre usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery codes, estados OAuth y cuentas OAuth enlazadas. La persistencia real vive en Prisma/SQLite; los tests siguen usando repositorios en memoria.
 
 ## Endpoints iniciales
 
@@ -128,11 +131,8 @@ La pantalla permite probar registro, login, logout, `/me`, reautenticacion, camb
 
 ## Notas de seguridad
 
-- La sesion final solo se crea despues de completar 2FA.
-- Los tokens de sesion y challenges se guardan hasheados.
-- Los recovery codes se muestran una vez y se guardan hasheados.
-- Desactivar 2FA revoca otras sesiones del usuario.
-- Cambiar password revoca otras sesiones del usuario.
-- Acciones sensibles requieren reautenticacion reciente.
-- OAuth login y OAuth linking usan callbacks separados y `state` con proposito explicito.
-- El unlink de OAuth 42 se bloquea si dejaria la cuenta sin password local ni otro acceso viable.
+- Los tokens de sesion son opacos y se guardan hasheados.
+- Las cookies usan `httpOnly` y pueden configurarse como `secure`.
+- Los recovery codes se guardan hasheados.
+- Los secretos TOTP se cifran con una clave local.
+- OAuth 42 separa login de linking para evitar enlaces implicitos por email.
