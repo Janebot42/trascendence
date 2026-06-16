@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { securityConfig } from './config/security.js';
-import { createPrismaClient } from './db/prisma.js';
+import { configureSqliteForConcurrency, createPrismaClient } from './db/prisma.js';
 import { AppError } from './shared/errors/AppError.js';
 import { SecretBox } from './shared/crypto/encryption.js';
 import { ScryptPasswordHasher } from './shared/crypto/passwordHasher.js';
@@ -29,6 +29,14 @@ import { InMemoryOAuthRepository } from './modules/oauth/oauth.repository.js';
 import { PrismaOAuthRepository } from './modules/oauth/oauth.prismaRepository.js';
 import { OAuthService } from './modules/oauth/oauth.service.js';
 import { registerOAuthRoutes } from './modules/oauth/oauth.routes.js';
+import { InMemoryMatchesRepository } from './modules/matches/matches.repository.js';
+import { PrismaMatchesRepository } from './modules/matches/matches.prismaRepository.js';
+import { MatchesService } from './modules/matches/matches.service.js';
+import { registerMatchRoutes } from './modules/matches/matches.routes.js';
+import { InMemoryChatRepository } from './modules/chat/chat.repository.js';
+import { PrismaChatRepository } from './modules/chat/chat.prismaRepository.js';
+import { ChatService } from './modules/chat/chat.service.js';
+import { registerChatRoutes } from './modules/chat/chat.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: env.NODE_ENV !== 'test' });
@@ -51,6 +59,7 @@ export async function buildApp() {
 
   const prisma = createPrismaClient();
   if (prisma) {
+    await configureSqliteForConcurrency(prisma);
     app.addHook('onClose', async () => {
       await prisma.$disconnect();
     });
@@ -62,6 +71,8 @@ export async function buildApp() {
   const authRepository = prisma ? new PrismaAuthRepository(prisma) : new InMemoryAuthRepository();
   const twoFactorRepository = prisma ? new PrismaTwoFactorRepository(prisma) : new InMemoryTwoFactorRepository();
   const oauthRepository = prisma ? new PrismaOAuthRepository(prisma) : new InMemoryOAuthRepository();
+  const matchesRepository = prisma ? new PrismaMatchesRepository(prisma) : new InMemoryMatchesRepository();
+  const chatRepository = prisma ? new PrismaChatRepository(prisma) : new InMemoryChatRepository();
   const sessionsService = new SessionsService(sessionsRepository, usersService);
   const totpService = new TotpService(new SecretBox(securityConfig.totpEncryptionKeyBase64));
   const recoveryCodesService = new RecoveryCodesService(twoFactorRepository);
@@ -79,6 +90,8 @@ export async function buildApp() {
     twoFactorService
   );
   const oauthService = new OAuthService(oauthRepository, usersService, authService, authRepository);
+  const matchesService = new MatchesService(matchesRepository, usersService);
+  const chatService = new ChatService(chatRepository);
 
   if (env.NODE_ENV === 'test') {
     app.decorate('testContext', {
@@ -87,7 +100,9 @@ export async function buildApp() {
       authService,
       authRepository,
       twoFactorService,
-      sessionsService
+      sessionsService,
+      matchesService,
+      chatService
     });
   }
 
@@ -108,6 +123,8 @@ export async function buildApp() {
   await registerOAuthRoutes(app, oauthService, sessionsService);
   await registerTwoFactorRoutes(app, twoFactorService, sessionsService);
   await registerUserRoutes(app, sessionsService, usersService);
+  await registerMatchRoutes(app, sessionsService, matchesService);
+  await registerChatRoutes(app, sessionsService, chatService);
 
   return app;
 }

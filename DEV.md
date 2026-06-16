@@ -79,9 +79,12 @@ two_factor_totp
 recovery_codes
 oauth_states
 oauth_accounts
+matches
+match_players
+chat_messages
 ```
 
-Future game, match, tournament, friend/block and chat models should be added to Prisma instead of handwritten SQL.
+Future game-state, tournament and friend/block models should be added to Prisma instead of handwritten SQL. Live game state should stay in memory/WebSocket; SQLite stores durable results, history and chat messages.
 
 ## Environment
 
@@ -218,11 +221,11 @@ Do not add JWT unless there is a concrete reason.
 - No account lockout policy beyond simple in-memory rate limiting.
 - No CSRF token layer yet.
 - No admin UI.
-- No game/match/tournament/chat models yet.
+- Match history and lobby chat now have Prisma models and repositories. No live game-state, tournament or friend/block models yet.
 
 These are acceptable for the current base. The next most useful backend improvements would be:
 
-1. Add match/game models in Prisma.
+1. Add WebSocket game loop with live state in memory.
 2. Add WebSocket authentication using the existing session cookie.
 3. Add CSRF protection if the frontend is cookie-based and browser-facing.
 4. Add password reset.

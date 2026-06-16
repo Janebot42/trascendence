@@ -93,7 +93,7 @@ Flujo de linking/unlinking:
 
 ## Estado actual
 
-La app ya cubre usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery codes, estados OAuth y cuentas OAuth enlazadas. La persistencia real vive en Prisma/SQLite; los tests siguen usando repositorios en memoria.
+La app ya cubre usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery codes, estados OAuth, cuentas OAuth enlazadas, historial basico de partidas y mensajes de chat de lobby. La persistencia real vive en Prisma/SQLite; los tests siguen usando repositorios en memoria.
 
 ## Endpoints iniciales
 
@@ -118,6 +118,10 @@ La app ya cubre usuarios, credenciales, sesiones, challenges 2FA, TOTP, recovery
 - `DELETE /2fa`
 - `GET /me`
 - `GET /admin/users`
+- `POST /matches`
+- `GET /users/:userId/matches`
+- `POST /chat/messages`
+- `GET /chat/messages`
 
 ## UI manual de pruebas
 

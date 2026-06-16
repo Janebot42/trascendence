@@ -189,8 +189,11 @@ Modelos actuales:
 - `RecoveryCode`
 - `OAuthAccount`
 - `OAuthState`
+- `Match`
+- `MatchPlayer`
+- `ChatMessage`
 
-SQLite se configura con:
+SQLite se configura con WAL y `busy_timeout` al arrancar Prisma para mejorar la convivencia entre lecturas y escrituras. La base se configura con:
 
 ```env
 DATABASE_URL="file:./dev.db"
@@ -299,6 +302,10 @@ sequenceDiagram
 - `DELETE /2fa`
 - `GET /me`
 - `GET /admin/users`
+- `POST /matches`
+- `GET /users/:userId/matches`
+- `POST /chat/messages`
+- `GET /chat/messages`
 
 ---
 
@@ -363,13 +370,13 @@ Los tests usan repositorios en memoria con `NODE_ENV=test`, así que no necesita
 
 ## 11. Próximos pasos naturales
 
-Después de esta base, lo más útil es añadir sobre Prisma:
+Después de esta base, lo más útil es:
 
-1. modelos de partidas,
-2. estadísticas de usuario,
-3. torneos,
-4. amistades/bloqueos,
-5. chat,
+1. añadir WebSocket para el estado vivo del juego en memoria,
+2. persistir solo resultados/eventos duraderos en SQLite,
+3. añadir estadísticas de usuario,
+4. torneos,
+5. amistades/bloqueos,
 6. autenticación de WebSocket leyendo la sesión/cookie existente.
 
 No conviene rehacer auth con JWT salvo que aparezca una razón concreta. Para este proyecto, las sesiones actuales ya encajan bien.
